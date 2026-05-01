@@ -361,6 +361,30 @@ test_write_zsh_loader_rejects_existing_regular_file_target() {
   pass
 }
 
+test_write_zsh_loader_rejects_symlink_to_directory_target() {
+  local workdir
+  local linked_dir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  linked_dir="${workdir}/linked-dir"
+  target_path="${workdir}/.zshrc"
+
+  mkdir -p "${linked_dir}"
+  ln -s "${linked_dir}" "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_zsh_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/zsh/.zshrc" 2>&1)"; then
+    fail "zsh loader should fail for a symlink to a directory"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "zsh loader symlink-dir rejection should use script error handling"
+  [[ -L "${target_path}" ]] || fail "zsh loader should leave the symlink in place"
+  assert_eq "${linked_dir}" "$(readlink "${target_path}")" "zsh loader should not alter the symlink target"
+  [[ ! -e "${linked_dir}"/.ghostconsole-zsh.* ]] || fail "zsh loader should not move temp files into the linked directory"
+  pass
+}
+
 test_write_git_loader_includes_repo_config() {
   local workdir
   local target_path
@@ -434,6 +458,30 @@ test_write_git_loader_rejects_existing_regular_file_target() {
   pass
 }
 
+test_write_git_loader_rejects_symlink_to_directory_target() {
+  local workdir
+  local linked_dir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  linked_dir="${workdir}/linked-dir"
+  target_path="${workdir}/.gitconfig"
+
+  mkdir -p "${linked_dir}"
+  ln -s "${linked_dir}" "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_git_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/git/config" 2>&1)"; then
+    fail "git loader should fail for a symlink to a directory"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "git loader symlink-dir rejection should use script error handling"
+  [[ -L "${target_path}" ]] || fail "git loader should leave the symlink in place"
+  assert_eq "${linked_dir}" "$(readlink "${target_path}")" "git loader should not alter the symlink target"
+  [[ ! -e "${linked_dir}"/.ghostconsole-git.* ]] || fail "git loader should not move temp files into the linked directory"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
@@ -452,9 +500,11 @@ test_write_zsh_loader_sources_repo_config
 test_write_zsh_loader_replaces_existing_symlink_without_touching_destination
 test_write_zsh_loader_rejects_existing_directory_target
 test_write_zsh_loader_rejects_existing_regular_file_target
+test_write_zsh_loader_rejects_symlink_to_directory_target
 test_write_git_loader_includes_repo_config
 test_write_git_loader_replaces_existing_symlink_without_touching_destination
 test_write_git_loader_rejects_existing_directory_target
 test_write_git_loader_rejects_existing_regular_file_target
+test_write_git_loader_rejects_symlink_to_directory_target
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
