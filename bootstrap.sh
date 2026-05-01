@@ -74,8 +74,8 @@ ensure_symlink() {
   local source_path="$1"
   local target_path="$2"
 
-  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace directory target with symlink: ${target_path}"
+  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace existing non-symlink target with symlink: ${target_path}"
   fi
 
   mkdir -p "$(dirname "${target_path}")"
