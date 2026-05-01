@@ -25,12 +25,13 @@ Clone the repo and run:
 ./bootstrap.sh
 \`\`\`
 
-This first version will:
-- detect your OS (macOS or Linux)
+The first milestone flow is:
+- detect whether you are on macOS or Linux
 - install `Ghostty` first, then `zsh` and `git`
-- link repo-managed configuration files
-- write lightweight home entry files for shell and git
-- back up conflicting existing files before replacing them
+- create managed config and backup directories in your home folder
+- link the repo-owned config in `.config/ghostty`, `.config/zsh`, and `.config/git`
+- write thin home entrypoints at `~/.zshrc` and `~/.gitconfig`
+- verify the installed tools and linked config paths before printing a summary
 
 ## ✅ Verify
 
@@ -48,6 +49,13 @@ Confirm these paths now point at this repo:
 readlink ~/.config/ghostty
 readlink ~/.config/zsh
 readlink ~/.config/git
+\`\`\`
+
+You should also see managed home entrypoints:
+
+\`\`\`bash
+sed -n '1p' ~/.zshrc
+sed -n '1,2p' ~/.gitconfig
 \`\`\`
 
 ---
