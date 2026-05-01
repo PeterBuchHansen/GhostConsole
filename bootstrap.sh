@@ -70,6 +70,14 @@ linux_version_codename() {
   printf '%s\n' "${version_codename}"
 }
 
+validate_linux_install_inputs() {
+  local distro_id="${1-}"
+  local version_codename="${2-}"
+
+  [[ -z "${distro_id}" || "${distro_id}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe distro id: ${distro_id}"
+  [[ -z "${version_codename}" || "${version_codename}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe version codename: ${version_codename}"
+}
+
 build_install_commands() {
   local platform="${1-}"
   local distro_id="${2-}"
@@ -83,6 +91,7 @@ build_install_commands() {
         'brew install zsh git'
       ;;
     linux)
+      validate_linux_install_inputs "${distro_id}" "${version_codename}"
       printf '%s\n' 'sudo apt-get update'
 
       case "${ghostty_state}" in
@@ -143,8 +152,7 @@ run_install_commands() {
     macos|'')
       ;;
     linux)
-      [[ -z "${distro_id}" || "${distro_id}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe distro id: ${distro_id}"
-      [[ -z "${version_codename}" || "${version_codename}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe version codename: ${version_codename}"
+      validate_linux_install_inputs "${distro_id}" "${version_codename}"
       ;;
   esac
 
