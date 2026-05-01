@@ -261,11 +261,110 @@ EOF
   mv -f "${temp_path}" "${target_path}"
 }
 
+repo_root() {
+  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
+}
+
+ensure_managed_paths() {
+  mkdir -p "${HOME}/.config" "${HOME}/.ghostconsole-backups"
+}
+
+link_repo_config() {
+  local root
+  local backup_root
+
+  root="$(repo_root)"
+  backup_root="${HOME}/.ghostconsole-backups"
+
+  prepare_link_target "${HOME}/.config/ghostty" "${root}/.config/ghostty" "${backup_root}"
+  prepare_link_target "${HOME}/.config/zsh" "${root}/.config/zsh" "${backup_root}"
+  prepare_link_target "${HOME}/.config/git" "${root}/.config/git" "${backup_root}"
+
+  ensure_symlink "${root}/.config/ghostty" "${HOME}/.config/ghostty"
+  ensure_symlink "${root}/.config/zsh" "${HOME}/.config/zsh"
+  ensure_symlink "${root}/.config/git" "${HOME}/.config/git"
+}
+
+write_home_entrypoints() {
+  local root
+  local backup_root
+  local zsh_loader
+  local git_loader
+
+  root="$(repo_root)"
+  backup_root="${HOME}/.ghostconsole-backups"
+  zsh_loader="source \"${root}/.config/zsh/.zshrc\""
+  git_loader=$'[include]\n    path = '"${root}"'/.config/git/config'
+
+  if [[ -L "${HOME}/.zshrc" ]]; then
+    backup_existing_target "${HOME}/.zshrc" "${backup_root}"
+  elif [[ -e "${HOME}/.zshrc" ]] && [[ "$(< "${HOME}/.zshrc")" != "${zsh_loader}" ]]; then
+    backup_existing_target "${HOME}/.zshrc" "${backup_root}"
+  fi
+
+  if [[ -L "${HOME}/.gitconfig" ]]; then
+    backup_existing_target "${HOME}/.gitconfig" "${backup_root}"
+  elif [[ -e "${HOME}/.gitconfig" ]] && [[ "$(< "${HOME}/.gitconfig")" != "${git_loader}" ]]; then
+    backup_existing_target "${HOME}/.gitconfig" "${backup_root}"
+  fi
+
+  if [[ ! -e "${HOME}/.zshrc" && ! -L "${HOME}/.zshrc" ]]; then
+    write_zsh_loader "${HOME}/.zshrc" "${root}/.config/zsh/.zshrc"
+  fi
+
+  if [[ ! -e "${HOME}/.gitconfig" && ! -L "${HOME}/.gitconfig" ]]; then
+    write_git_loader "${HOME}/.gitconfig" "${root}/.config/git/config"
+  fi
+}
+
+verify_installation() {
+  command -v ghostty >/dev/null 2>&1 || die "ghostty not found after install"
+  command -v zsh >/dev/null 2>&1 || die "zsh not found after install"
+  command -v git >/dev/null 2>&1 || die "git not found after install"
+}
+
+verify_links() {
+  local root
+
+  root="$(repo_root)"
+
+  [[ -L "${HOME}/.config/ghostty" ]] && [[ "$(readlink "${HOME}/.config/ghostty")" == "${root}/.config/ghostty" ]] || die "ghostty config link is incorrect"
+  [[ -L "${HOME}/.config/zsh" ]] && [[ "$(readlink "${HOME}/.config/zsh")" == "${root}/.config/zsh" ]] || die "zsh config link is incorrect"
+  [[ -L "${HOME}/.config/git" ]] && [[ "$(readlink "${HOME}/.config/git")" == "${root}/.config/git" ]] || die "git config link is incorrect"
+}
+
+print_summary() {
+  cat <<EOF
+[ghostconsole] bootstrap complete
+[ghostconsole] installed: ghostty, zsh, git
+[ghostconsole] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig
+EOF
+}
+
 main() {
   local platform
+  local distro_id=''
+  local ghostty_state='present'
+  local version_codename=''
 
   platform="$(detect_platform)"
-  log "detected ${platform}"
+
+  if [[ "${platform}" == "linux" ]]; then
+    distro_id="$(linux_distro_id)"
+    version_codename="$(linux_version_codename)"
+
+    if ! ghostty_available_in_apt; then
+      ghostty_state='missing'
+    fi
+  fi
+
+  run_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}"
+  ensure_managed_paths
+  link_repo_config
+  write_home_entrypoints
+  verify_installation
+  verify_links
+  print_summary
 }
 
 if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
