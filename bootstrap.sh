@@ -52,6 +52,7 @@ backup_existing_target() {
   local basename_no_dot
   local stamp
   local backup_path
+  local suffix=1
 
   [[ -e "${target_path}" || -L "${target_path}" ]] || return 0
 
@@ -59,6 +60,11 @@ backup_existing_target() {
   basename_no_dot="$(basename "${target_path}" | sed 's/^\.//')"
   stamp="${GHOSTCONSOLE_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
   backup_path="${backup_root}/${basename_no_dot}-${stamp}"
+
+  while [[ -e "${backup_path}" || -L "${backup_path}" ]]; do
+    backup_path="${backup_root}/${basename_no_dot}-${stamp}-${suffix}"
+    suffix=$((suffix + 1))
+  done
 
   mv "${target_path}" "${backup_path}"
   log "backed up ${target_path} to ${backup_path}"
@@ -96,8 +102,8 @@ write_zsh_loader() {
   local target_dir
   local temp_path
 
-  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace directory target with zsh loader: ${target_path}"
+  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace existing non-symlink target with zsh loader: ${target_path}"
   fi
 
   target_dir="$(dirname "${target_path}")"
@@ -114,8 +120,8 @@ write_git_loader() {
   local target_dir
   local temp_path
 
-  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace directory target with git loader: ${target_path}"
+  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace existing non-symlink target with git loader: ${target_path}"
   fi
 
   target_dir="$(dirname "${target_path}")"

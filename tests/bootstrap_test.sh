@@ -137,6 +137,28 @@ test_backup_existing_target_preserves_original_contents() {
   pass
 }
 
+test_backup_existing_target_avoids_name_collisions() {
+  local workdir
+  local target
+  local backup_root
+
+  workdir="$(mktemp -d)"
+  target="${workdir}/.zshrc"
+  backup_root="${workdir}/backups"
+
+  printf 'first-version\n' > "${target}"
+  GHOSTCONSOLE_TIMESTAMP="20260424-120000" backup_existing_target "${target}" "${backup_root}"
+
+  printf 'second-version\n' > "${target}"
+  GHOSTCONSOLE_TIMESTAMP="20260424-120000" backup_existing_target "${target}" "${backup_root}"
+
+  [[ -f "${backup_root}/zshrc-20260424-120000" ]] || fail "first backup should keep its original name"
+  [[ -f "${backup_root}/zshrc-20260424-120000-1" ]] || fail "second backup should use a collision-safe name"
+  assert_eq 'first-version' "$(< "${backup_root}/zshrc-20260424-120000")" "first backup contents should be preserved"
+  assert_eq 'second-version' "$(< "${backup_root}/zshrc-20260424-120000-1")" "second backup contents should be preserved"
+  pass
+}
+
 test_ensure_symlink_creates_expected_link() {
   local workdir
   local source_path
@@ -297,6 +319,26 @@ test_write_zsh_loader_rejects_existing_directory_target() {
   pass
 }
 
+test_write_zsh_loader_rejects_existing_regular_file_target() {
+  local workdir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.zshrc"
+
+  printf 'legacy-file\n' > "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_zsh_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/zsh/.zshrc" 2>&1)"; then
+    fail "zsh loader should fail for an existing regular file"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "zsh loader file rejection should use script error handling"
+  assert_eq 'legacy-file' "$(< "${target_path}")" "zsh loader should leave the existing file unchanged"
+  [[ ! -e "$(dirname "${target_path}")"/.ghostconsole-zsh.* ]] || fail "zsh loader should not leave a temp file behind"
+  pass
+}
+
 test_write_git_loader_includes_repo_config() {
   local workdir
   local target_path
@@ -350,6 +392,26 @@ test_write_git_loader_rejects_existing_directory_target() {
   pass
 }
 
+test_write_git_loader_rejects_existing_regular_file_target() {
+  local workdir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.gitconfig"
+
+  printf '[user]\n    email = legacy@example.com\n' > "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_git_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/git/config" 2>&1)"; then
+    fail "git loader should fail for an existing regular file"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "git loader file rejection should use script error handling"
+  assert_eq $'[user]\n    email = legacy@example.com' "$(< "${target_path}")" "git loader should leave the existing file unchanged"
+  [[ ! -e "$(dirname "${target_path}")"/.ghostconsole-git.* ]] || fail "git loader should not leave a temp file behind"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
@@ -357,6 +419,7 @@ test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main
 test_backup_existing_target_moves_it_to_backup_root
 test_backup_existing_target_preserves_original_contents
+test_backup_existing_target_avoids_name_collisions
 test_ensure_symlink_creates_expected_link
 test_ensure_symlink_rejects_existing_directory
 test_prepare_link_target_backs_up_existing_directory
@@ -365,8 +428,10 @@ test_prepare_link_target_leaves_matching_symlink_untouched
 test_write_zsh_loader_sources_repo_config
 test_write_zsh_loader_replaces_existing_symlink_without_touching_destination
 test_write_zsh_loader_rejects_existing_directory_target
+test_write_zsh_loader_rejects_existing_regular_file_target
 test_write_git_loader_includes_repo_config
 test_write_git_loader_replaces_existing_symlink_without_touching_destination
 test_write_git_loader_rejects_existing_directory_target
+test_write_git_loader_rejects_existing_regular_file_target
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
