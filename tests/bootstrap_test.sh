@@ -169,6 +169,70 @@ test_run_install_commands_executes_without_bash_env_side_effects() {
   pass
 }
 
+test_run_install_commands_rejects_unsupported_linux_fallback_before_execution() {
+  local workdir
+  local marker_path
+  local output
+
+  workdir="$(mktemp -d)"
+  marker_path="${workdir}/executed"
+
+  if output="$(bash -c '
+    source "$1"
+    run_install_command() {
+      printf executed > "$2"
+    }
+    run_install_commands "linux" "fedora" "missing" ""
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${marker_path}" 2>&1)"; then
+    fail "run_install_commands should fail for unsupported linux fallback"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "unsupported linux fallback should use script error handling"
+  assert_contains "unsupported linux distro for ghostty install fallback: fedora" "${output}" "unsupported linux fallback should explain the distro rejection"
+  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not execute any command before rejecting unsupported linux fallback"
+  pass
+}
+
+test_run_install_commands_rejects_missing_debian_codename_before_execution() {
+  local workdir
+  local marker_path
+  local output
+
+  workdir="$(mktemp -d)"
+  marker_path="${workdir}/executed"
+
+  if output="$(bash -c '
+    source "$1"
+    run_install_command() {
+      printf executed > "$2"
+    }
+    run_install_commands "linux" "debian" "missing" ""
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${marker_path}" 2>&1)"; then
+    fail "run_install_commands should fail when Debian codename is missing"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "missing Debian codename should use script error handling"
+  assert_contains "missing debian version codename for ghostty install fallback" "${output}" "missing Debian codename should explain the failure"
+  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not execute any command before rejecting missing Debian codename"
+  pass
+}
+
+test_run_install_command_ignores_exported_function_hijacking() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    printf() {
+      builtin printf hijacked
+    }
+    export -f printf
+    run_install_command "printf safe"
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_eq "safe" "${output}" "run_install_command should ignore exported function hijacking"
+  pass
+}
+
 test_package_manager_for_missing_arg_uses_controlled_error() {
   local output
 
@@ -581,6 +645,9 @@ test_build_install_commands_linux_with_ghostty_present_skips_repo_setup
 test_build_install_commands_rejects_unsupported_linux_fallback
 test_build_install_commands_rejects_missing_debian_codename
 test_run_install_commands_executes_without_bash_env_side_effects
+test_run_install_commands_rejects_unsupported_linux_fallback_before_execution
+test_run_install_commands_rejects_missing_debian_codename_before_execution
+test_run_install_command_ignores_exported_function_hijacking
 test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main
 test_backup_existing_target_moves_it_to_backup_root

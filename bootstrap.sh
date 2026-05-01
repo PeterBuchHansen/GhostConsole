@@ -123,7 +123,12 @@ build_install_commands() {
 run_install_command() {
   local command="${1-}"
 
-  env -u BASH_ENV bash --noprofile --norc -c "${command}"
+  env -u BASH_ENV -u ENV bash --noprofile --norc -c '
+    while IFS= read -r function_name; do
+      unset -f "${function_name}"
+    done < <(compgen -A function)
+    builtin eval -- "$1"
+  ' _ "${command}"
 }
 
 run_install_commands() {
@@ -131,6 +136,7 @@ run_install_commands() {
   local distro_id="${2-}"
   local ghostty_state="${3-}"
   local version_codename="${4-}"
+  local install_commands=''
   local command
 
   case "${platform}" in
@@ -142,10 +148,12 @@ run_install_commands() {
       ;;
   esac
 
+  install_commands="$(build_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}")" || return $?
+
   while IFS= read -r command; do
     [[ -n "${command}" ]] || continue
     run_install_command "${command}"
-  done < <(build_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}")
+  done <<< "${install_commands}"
 }
 
 backup_existing_target() {
