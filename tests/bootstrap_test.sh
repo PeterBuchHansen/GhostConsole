@@ -140,6 +140,32 @@ test_build_install_commands_rejects_missing_debian_codename() {
   pass
 }
 
+test_build_install_commands_rejects_unsafe_linux_distro_id_before_output() {
+  local output
+
+  if output="$(bash -c 'source "$1"; build_install_commands "linux" "ubuntu;touch /tmp/pwned" "present" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "unsafe linux distro id should fail"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "unsafe linux distro id should use script error handling"
+  assert_contains "unsafe distro id: ubuntu;touch /tmp/pwned" "${output}" "unsafe linux distro id should explain the rejection"
+  assert_not_contains "sudo apt-get update" "${output}" "unsafe linux distro id should fail before command construction"
+  pass
+}
+
+test_build_install_commands_rejects_unsafe_debian_codename_before_output() {
+  local output
+
+  if output="$(bash -c 'source "$1"; build_install_commands "linux" "debian" "missing" "bookworm;touch /tmp/pwned"' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "unsafe Debian codename should fail"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "unsafe Debian codename should use script error handling"
+  assert_contains "unsafe version codename: bookworm;touch /tmp/pwned" "${output}" "unsafe Debian codename should explain the rejection"
+  assert_not_contains "sudo apt-get update" "${output}" "unsafe Debian codename should fail before command construction"
+  pass
+}
+
 test_run_install_commands_executes_without_bash_env_side_effects() {
   local workdir
   local bash_env_path
@@ -644,6 +670,8 @@ test_build_install_commands_debian_adds_griffo_repo_when_missing
 test_build_install_commands_linux_with_ghostty_present_skips_repo_setup
 test_build_install_commands_rejects_unsupported_linux_fallback
 test_build_install_commands_rejects_missing_debian_codename
+test_build_install_commands_rejects_unsafe_linux_distro_id_before_output
+test_build_install_commands_rejects_unsafe_debian_codename_before_output
 test_run_install_commands_executes_without_bash_env_side_effects
 test_run_install_commands_rejects_unsupported_linux_fallback_before_execution
 test_run_install_commands_rejects_missing_debian_codename_before_execution
