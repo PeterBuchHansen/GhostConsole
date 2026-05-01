@@ -277,6 +277,26 @@ test_write_zsh_loader_replaces_existing_symlink_without_touching_destination() {
   pass
 }
 
+test_write_zsh_loader_rejects_existing_directory_target() {
+  local workdir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.zshrc"
+
+  mkdir -p "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_zsh_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/zsh/.zshrc" 2>&1)"; then
+    fail "zsh loader should fail for an existing real directory"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "zsh loader directory rejection should use script error handling"
+  [[ -d "${target_path}" ]] || fail "zsh loader should leave the existing directory in place"
+  [[ ! -e "${target_path}"/.ghostconsole-zsh.* ]] || fail "zsh loader should not leave a temp file behind"
+  pass
+}
+
 test_write_git_loader_includes_repo_config() {
   local workdir
   local target_path
@@ -310,6 +330,26 @@ test_write_git_loader_replaces_existing_symlink_without_touching_destination() {
   pass
 }
 
+test_write_git_loader_rejects_existing_directory_target() {
+  local workdir
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.gitconfig"
+
+  mkdir -p "${target_path}"
+
+  if output="$(bash -c 'source "$1"; write_git_loader "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${target_path}" "/repo/.config/git/config" 2>&1)"; then
+    fail "git loader should fail for an existing real directory"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "git loader directory rejection should use script error handling"
+  [[ -d "${target_path}" ]] || fail "git loader should leave the existing directory in place"
+  [[ ! -e "${target_path}"/.ghostconsole-git.* ]] || fail "git loader should not leave a temp file behind"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
@@ -324,7 +364,9 @@ test_prepare_link_target_backs_up_existing_wrong_symlink
 test_prepare_link_target_leaves_matching_symlink_untouched
 test_write_zsh_loader_sources_repo_config
 test_write_zsh_loader_replaces_existing_symlink_without_touching_destination
+test_write_zsh_loader_rejects_existing_directory_target
 test_write_git_loader_includes_repo_config
 test_write_git_loader_replaces_existing_symlink_without_touching_destination
+test_write_git_loader_rejects_existing_directory_target
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
