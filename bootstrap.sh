@@ -46,6 +46,98 @@ required_packages() {
   printf '%s\n' ghostty zsh git
 }
 
+ghostty_available_in_apt() {
+  apt-cache show ghostty >/dev/null 2>&1
+}
+
+linux_distro_id() {
+  local distro_id=''
+
+  if [[ -r /etc/os-release ]]; then
+    distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+  fi
+
+  printf '%s\n' "${distro_id}"
+}
+
+linux_version_codename() {
+  local version_codename=''
+
+  if [[ -r /etc/os-release ]]; then
+    version_codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-}")"
+  fi
+
+  printf '%s\n' "${version_codename}"
+}
+
+build_install_commands() {
+  local platform="${1-}"
+  local distro_id="${2-}"
+  local ghostty_state="${3-}"
+  local version_codename="${4-}"
+
+  case "${platform}" in
+    macos)
+      printf '%s\n' \
+        'brew install --cask ghostty' \
+        'brew install zsh git'
+      ;;
+    linux)
+      printf '%s\n' 'sudo apt-get update'
+
+      case "${ghostty_state}" in
+        missing)
+          case "${distro_id}" in
+            ubuntu)
+              printf '%s\n' \
+                'sudo apt-get install -y software-properties-common curl gpg' \
+                'sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu' \
+                'sudo apt-get update'
+              ;;
+            debian)
+              printf '%s\n' \
+                'sudo apt-get install -y curl gpg lsb-release' \
+                'sudo mkdir -p /usr/share/keyrings' \
+                'curl -fsSL https://debian.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor -o /usr/share/keyrings/debian.griffo.io.gpg' \
+                "echo \"deb [signed-by=/usr/share/keyrings/debian.griffo.io.gpg] https://debian.griffo.io/apt ${version_codename} main\" | sudo tee /etc/apt/sources.list.d/debian.griffo.io.list > /dev/null" \
+                'sudo apt-get update'
+              ;;
+          esac
+          ;;
+      esac
+
+      printf '%s\n' \
+        'sudo apt-get install -y ghostty' \
+        'sudo apt-get install -y zsh git'
+      ;;
+    *)
+      die "unsupported install target: ${platform}"
+      ;;
+  esac
+}
+
+run_install_commands() {
+  local platform="${1-}"
+  local distro_id="${2-}"
+  local ghostty_state="${3-}"
+  local version_codename="${4-}"
+  local command
+
+  case "${platform}" in
+    macos|'')
+      ;;
+    linux)
+      [[ -z "${distro_id}" || "${distro_id}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe distro id: ${distro_id}"
+      [[ -z "${version_codename}" || "${version_codename}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe version codename: ${version_codename}"
+      ;;
+  esac
+
+  while IFS= read -r command; do
+    [[ -n "${command}" ]] || continue
+    bash -lc "${command}"
+  done < <(build_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}")
+}
+
 backup_existing_target() {
   local target_path="$1"
   local backup_root="$2"
