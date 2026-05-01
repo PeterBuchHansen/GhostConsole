@@ -770,7 +770,7 @@ test_verify_installation_rejects_missing_ghostty() {
   pass
 }
 
-test_verify_links_accepts_expected_repo_targets() {
+test_verify_links_accepts_expected_repo_targets_and_home_entrypoints() {
   local workdir
 
   workdir="$(mktemp -d)"
@@ -778,9 +778,32 @@ test_verify_links_accepts_expected_repo_targets() {
   ln -s "${REPO_ROOT}/.config/ghostty" "${workdir}/.config/ghostty"
   ln -s "${REPO_ROOT}/.config/zsh" "${workdir}/.config/zsh"
   ln -s "${REPO_ROOT}/.config/git" "${workdir}/.config/git"
+  printf 'source "%s/.config/zsh/.zshrc"\n' "${REPO_ROOT}" > "${workdir}/.zshrc"
+  printf '[include]\n    path = %s/.config/git/config\n' "${REPO_ROOT}" > "${workdir}/.gitconfig"
 
   HOME="${workdir}" verify_links
 
+  pass
+}
+
+test_verify_links_rejects_wrong_home_entrypoint_contents() {
+  local workdir
+  local output
+
+  workdir="$(mktemp -d)"
+  mkdir -p "${workdir}/.config"
+  ln -s "${REPO_ROOT}/.config/ghostty" "${workdir}/.config/ghostty"
+  ln -s "${REPO_ROOT}/.config/zsh" "${workdir}/.config/zsh"
+  ln -s "${REPO_ROOT}/.config/git" "${workdir}/.config/git"
+  printf 'source "/wrong/.config/zsh/.zshrc"\n' > "${workdir}/.zshrc"
+  printf '[include]\n    path = %s/.config/git/config\n' "${REPO_ROOT}" > "${workdir}/.gitconfig"
+
+  if output="$(HOME="${workdir}" bash -c 'source "$1"; verify_links' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "verify_links should fail when ~/.zshrc does not match the managed loader"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "wrong home entrypoint should use script error handling"
+  assert_contains "~/.zshrc loader is incorrect" "${output}" "wrong home entrypoint should explain the failure"
   pass
 }
 
@@ -820,6 +843,40 @@ test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
   main
 
   assert_eq $'install:linux:ubuntu:missing:noble\npaths\nlinks\nentrypoints\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main should install before linking and verify before summary"
+  pass
+}
+
+test_main_does_not_print_summary_when_verification_fails() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+
+  if output="$(TRACE_FILE="${trace_file}" bash -c '
+    source "$1"
+    detect_platform() { printf "linux\n"; }
+    linux_distro_id() { printf "ubuntu\n"; }
+    linux_version_codename() { printf "noble\n"; }
+    ghostty_available_in_apt() { return 0; }
+    run_install_commands() { printf "install\n" >> "${TRACE_FILE}"; }
+    ensure_managed_paths() { printf "paths\n" >> "${TRACE_FILE}"; }
+    link_repo_config() { printf "links\n" >> "${TRACE_FILE}"; }
+    write_home_entrypoints() { printf "entrypoints\n" >> "${TRACE_FILE}"; }
+    verify_installation() { printf "verify-install\n" >> "${TRACE_FILE}"; }
+    verify_links() {
+      printf "verify-links\n" >> "${TRACE_FILE}"
+      die "zsh config link is incorrect"
+    }
+    print_summary() { printf "summary\n" >> "${TRACE_FILE}"; }
+    main
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "main should fail when verification fails"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "verification failure should use script error handling"
+  assert_eq $'install\npaths\nlinks\nentrypoints\nverify-install\nverify-links' "$(< "${trace_file}")" "main should stop before printing the summary when verification fails"
   pass
 }
 
@@ -866,8 +923,10 @@ test_link_repo_config_backs_up_existing_conflicts
 test_write_home_entrypoints_backs_up_existing_files_and_writes_loaders
 test_write_home_entrypoints_backs_up_existing_symlinks_before_replacing
 test_verify_installation_rejects_missing_ghostty
-test_verify_links_accepts_expected_repo_targets
+test_verify_links_accepts_expected_repo_targets_and_home_entrypoints
+test_verify_links_rejects_wrong_home_entrypoint_contents
 test_print_summary_reports_installed_tools_and_linked_targets
 test_main_linux_orchestrates_install_link_verify_and_summary_in_order
+test_main_does_not_print_summary_when_verification_fails
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"

@@ -117,15 +117,11 @@ This area will grow over time.
 
 ---
 
-## 🔒 Local overrides
+## 🔒 Local state
 
-Machine-specific or sensitive config should not be committed.
+This milestone backs up conflicting files before replacing them, but it does not implement a separate local-override loading mechanism yet.
 
-Use local files like:
-- `~/.zshrc.local`
-- anything inside `private/`
-
-These are ignored by git and loaded if present.
+Machine-specific changes need to be managed manually outside the repo for now.
 
 ---
 
