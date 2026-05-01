@@ -198,6 +198,28 @@ test_ensure_symlink_rejects_existing_directory() {
   pass
 }
 
+test_ensure_symlink_rejects_existing_regular_file() {
+  local workdir
+  local source_path
+  local target_path
+  local output
+
+  workdir="$(mktemp -d)"
+  source_path="${workdir}/source"
+  target_path="${workdir}/target"
+
+  mkdir -p "${source_path}"
+  printf 'legacy-target\n' > "${target_path}"
+
+  if output="$(bash -c 'source "$1"; ensure_symlink "$2" "$3"' _ "${REPO_ROOT}/bootstrap.sh" "${source_path}" "${target_path}" 2>&1)"; then
+    fail "ensure_symlink should fail for an existing regular file"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "file rejection should use script error handling"
+  assert_eq 'legacy-target' "$(< "${target_path}")" "existing file should remain unchanged"
+  pass
+}
+
 test_prepare_link_target_backs_up_existing_directory() {
   local workdir
   local target_path
@@ -315,7 +337,7 @@ test_write_zsh_loader_rejects_existing_directory_target() {
 
   assert_contains "[ghostconsole] error:" "${output}" "zsh loader directory rejection should use script error handling"
   [[ -d "${target_path}" ]] || fail "zsh loader should leave the existing directory in place"
-  [[ ! -e "${target_path}"/.ghostconsole-zsh.* ]] || fail "zsh loader should not leave a temp file behind"
+  [[ ! -e "$(dirname "${target_path}")"/.ghostconsole-zsh.* ]] || fail "zsh loader should not leave a temp file behind"
   pass
 }
 
@@ -388,7 +410,7 @@ test_write_git_loader_rejects_existing_directory_target() {
 
   assert_contains "[ghostconsole] error:" "${output}" "git loader directory rejection should use script error handling"
   [[ -d "${target_path}" ]] || fail "git loader should leave the existing directory in place"
-  [[ ! -e "${target_path}"/.ghostconsole-git.* ]] || fail "git loader should not leave a temp file behind"
+  [[ ! -e "$(dirname "${target_path}")"/.ghostconsole-git.* ]] || fail "git loader should not leave a temp file behind"
   pass
 }
 
@@ -422,6 +444,7 @@ test_backup_existing_target_preserves_original_contents
 test_backup_existing_target_avoids_name_collisions
 test_ensure_symlink_creates_expected_link
 test_ensure_symlink_rejects_existing_directory
+test_ensure_symlink_rejects_existing_regular_file
 test_prepare_link_target_backs_up_existing_directory
 test_prepare_link_target_backs_up_existing_wrong_symlink
 test_prepare_link_target_leaves_matching_symlink_untouched
