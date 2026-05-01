@@ -661,6 +661,168 @@ test_write_git_loader_rejects_symlink_to_directory_target() {
   pass
 }
 
+test_repo_root_returns_bootstrap_directory() {
+  local root
+
+  root="$(bash -c 'cd /tmp && source "$1" && repo_root' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_eq "${REPO_ROOT}" "${root}" "repo_root should resolve from bootstrap.sh location"
+  pass
+}
+
+test_ensure_managed_paths_creates_config_and_backup_dirs() {
+  local workdir
+
+  workdir="$(mktemp -d)"
+  HOME="${workdir}" ensure_managed_paths
+
+  [[ -d "${workdir}/.config" ]] || fail "ensure_managed_paths should create ~/.config"
+  [[ -d "${workdir}/.ghostconsole-backups" ]] || fail "ensure_managed_paths should create ~/.ghostconsole-backups"
+  pass
+}
+
+test_link_repo_config_creates_managed_symlinks() {
+  local workdir
+
+  workdir="$(mktemp -d)"
+  HOME="${workdir}" link_repo_config
+
+  [[ -L "${workdir}/.config/ghostty" ]] || fail "link_repo_config should link ghostty config"
+  [[ -L "${workdir}/.config/zsh" ]] || fail "link_repo_config should link zsh config"
+  [[ -L "${workdir}/.config/git" ]] || fail "link_repo_config should link git config"
+  assert_eq "${REPO_ROOT}/.config/ghostty" "$(readlink "${workdir}/.config/ghostty")" "ghostty config link should point to repo config"
+  assert_eq "${REPO_ROOT}/.config/zsh" "$(readlink "${workdir}/.config/zsh")" "zsh config link should point to repo config"
+  assert_eq "${REPO_ROOT}/.config/git" "$(readlink "${workdir}/.config/git")" "git config link should point to repo config"
+  pass
+}
+
+test_link_repo_config_backs_up_existing_conflicts() {
+  local workdir
+  local backup_root
+
+  workdir="$(mktemp -d)"
+  backup_root="${workdir}/.ghostconsole-backups"
+  mkdir -p "${workdir}/.config/ghostty"
+  printf 'legacy\n' > "${workdir}/.config/ghostty/config"
+
+  HOME="${workdir}" GHOSTCONSOLE_TIMESTAMP="20260424-120000" link_repo_config
+
+  [[ -d "${backup_root}/ghostty-20260424-120000" ]] || fail "link_repo_config should back up conflicting ghostty config before linking"
+  [[ -L "${workdir}/.config/ghostty" ]] || fail "link_repo_config should replace the conflicting ghostty config with a symlink"
+  pass
+}
+
+test_write_home_entrypoints_backs_up_existing_files_and_writes_loaders() {
+  local workdir
+  local backup_root
+
+  workdir="$(mktemp -d)"
+  backup_root="${workdir}/.ghostconsole-backups"
+  printf 'legacy zsh\n' > "${workdir}/.zshrc"
+  printf 'legacy git\n' > "${workdir}/.gitconfig"
+
+  HOME="${workdir}" GHOSTCONSOLE_TIMESTAMP="20260424-120000" write_home_entrypoints
+
+  [[ -f "${backup_root}/zshrc-20260424-120000" ]] || fail "write_home_entrypoints should back up an existing ~/.zshrc"
+  [[ -f "${backup_root}/gitconfig-20260424-120000" ]] || fail "write_home_entrypoints should back up an existing ~/.gitconfig"
+  assert_eq 'source "'"${REPO_ROOT}"'/.config/zsh/.zshrc"' "$(< "${workdir}/.zshrc")" "write_home_entrypoints should write the managed zsh loader"
+  assert_eq $'[include]\n    path = '"${REPO_ROOT}"'/.config/git/config' "$(< "${workdir}/.gitconfig")" "write_home_entrypoints should write the managed git loader"
+  pass
+}
+
+test_write_home_entrypoints_backs_up_existing_symlinks_before_replacing() {
+  local workdir
+  local backup_root
+  local legacy_target
+
+  workdir="$(mktemp -d)"
+  backup_root="${workdir}/.ghostconsole-backups"
+  legacy_target="${workdir}/legacy-zshrc"
+  printf 'legacy target\n' > "${legacy_target}"
+  ln -s "${legacy_target}" "${workdir}/.zshrc"
+
+  HOME="${workdir}" GHOSTCONSOLE_TIMESTAMP="20260424-120000" write_home_entrypoints
+
+  [[ -L "${backup_root}/zshrc-20260424-120000" ]] || fail "write_home_entrypoints should back up an existing ~/.zshrc symlink before replacing it"
+  assert_eq "${legacy_target}" "$(readlink "${backup_root}/zshrc-20260424-120000")" "write_home_entrypoints should preserve the original ~/.zshrc symlink target"
+  assert_eq 'legacy target' "$(< "${legacy_target}")" "write_home_entrypoints should not modify the old symlink destination"
+  pass
+}
+
+test_verify_installation_rejects_missing_ghostty() {
+  local output
+
+  if output="$(bash -c '
+    source "$1"
+    command() {
+      if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
+        return 1
+      fi
+      return 0
+    }
+    verify_installation
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "verify_installation should fail when ghostty is missing"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "verify_installation failure should use script error handling"
+  assert_contains "ghostty not found after install" "${output}" "verify_installation should explain the missing binary"
+  pass
+}
+
+test_verify_links_accepts_expected_repo_targets() {
+  local workdir
+
+  workdir="$(mktemp -d)"
+  mkdir -p "${workdir}/.config"
+  ln -s "${REPO_ROOT}/.config/ghostty" "${workdir}/.config/ghostty"
+  ln -s "${REPO_ROOT}/.config/zsh" "${workdir}/.config/zsh"
+  ln -s "${REPO_ROOT}/.config/git" "${workdir}/.config/git"
+
+  HOME="${workdir}" verify_links
+
+  pass
+}
+
+test_print_summary_reports_installed_tools_and_linked_targets() {
+  local output
+
+  output="$(print_summary)"
+
+  assert_contains "[ghostconsole] bootstrap complete" "${output}" "print_summary should report completion"
+  assert_contains "[ghostconsole] installed: ghostty, zsh, git" "${output}" "print_summary should list installed tools"
+  assert_contains "[ghostconsole] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig" "${output}" "print_summary should list linked targets"
+  pass
+}
+
+test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
+  local workdir
+  local trace_file
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+
+  repo_root() { printf '%s\n' "/repo"; }
+  detect_platform() { printf 'linux\n'; }
+  linux_distro_id() { printf 'ubuntu\n'; }
+  linux_version_codename() { printf 'noble\n'; }
+  ghostty_available_in_apt() { return 1; }
+  run_install_commands() {
+    printf 'install:%s:%s:%s:%s\n' "$1" "$2" "$3" "$4" >> "${trace_file}"
+  }
+  ensure_managed_paths() { printf 'paths\n' >> "${trace_file}"; }
+  link_repo_config() { printf 'links\n' >> "${trace_file}"; }
+  write_home_entrypoints() { printf 'entrypoints\n' >> "${trace_file}"; }
+  verify_installation() { printf 'verify-install\n' >> "${trace_file}"; }
+  verify_links() { printf 'verify-links\n' >> "${trace_file}"; }
+  print_summary() { printf 'summary\n' >> "${trace_file}"; }
+
+  main
+
+  assert_eq $'install:linux:ubuntu:missing:noble\npaths\nlinks\nentrypoints\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main should install before linking and verify before summary"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
@@ -697,5 +859,15 @@ test_write_git_loader_replaces_existing_symlink_without_touching_destination
 test_write_git_loader_rejects_existing_directory_target
 test_write_git_loader_rejects_existing_regular_file_target
 test_write_git_loader_rejects_symlink_to_directory_target
+test_repo_root_returns_bootstrap_directory
+test_ensure_managed_paths_creates_config_and_backup_dirs
+test_link_repo_config_creates_managed_symlinks
+test_link_repo_config_backs_up_existing_conflicts
+test_write_home_entrypoints_backs_up_existing_files_and_writes_loaders
+test_write_home_entrypoints_backs_up_existing_symlinks_before_replacing
+test_verify_installation_rejects_missing_ghostty
+test_verify_links_accepts_expected_repo_targets
+test_print_summary_reports_installed_tools_and_linked_targets
+test_main_linux_orchestrates_install_link_verify_and_summary_in_order
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
