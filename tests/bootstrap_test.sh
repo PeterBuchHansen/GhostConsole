@@ -27,6 +27,26 @@ assert_eq() {
   fi
 }
 
+assert_contains() {
+  local needle="$1"
+  local haystack="$2"
+  local message="$3"
+
+  if [[ "${haystack}" != *"${needle}"* ]]; then
+    fail "${message}: expected output to contain [${needle}] got [${haystack}]"
+  fi
+}
+
+assert_not_contains() {
+  local needle="$1"
+  local haystack="$2"
+  local message="$3"
+
+  if [[ "${haystack}" == *"${needle}"* ]]; then
+    fail "${message}: expected output not to contain [${needle}] got [${haystack}]"
+  fi
+}
+
 test_detect_platform_linux_uses_apt() {
   local platform
   local manager
@@ -60,8 +80,32 @@ test_detect_platform_macos_uses_brew() {
   pass
 }
 
+test_package_manager_for_missing_arg_uses_controlled_error() {
+  local output
+
+  if output="$(bash -c 'source "$1"; package_manager_for' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "package_manager_for without args should fail"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "missing arg should use script error handling"
+  assert_contains "unsupported package manager target:" "${output}" "missing arg should explain the target failure"
+  assert_not_contains "unbound variable" "${output}" "missing arg should not trigger bash unbound variable"
+  pass
+}
+
+test_sourcing_bootstrap_does_not_run_main() {
+  local output
+
+  output="$(bash -c 'source "$1"' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_eq "" "${output}" "sourcing bootstrap.sh should not execute main"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
+test_package_manager_for_missing_arg_uses_controlled_error
+test_sourcing_bootstrap_does_not_run_main
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"

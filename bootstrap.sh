@@ -27,7 +27,9 @@ detect_platform() {
 }
 
 package_manager_for() {
-  case "$1" in
+  local platform="${1-}"
+
+  case "${platform}" in
     macos)
       printf 'brew\n'
       ;;
@@ -35,7 +37,7 @@ package_manager_for() {
       printf 'apt\n'
       ;;
     *)
-      die "unsupported package manager target: $1"
+      die "unsupported package manager target: ${platform}"
       ;;
   esac
 }
