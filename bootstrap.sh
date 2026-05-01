@@ -68,6 +68,10 @@ ensure_symlink() {
   local source_path="$1"
   local target_path="$2"
 
+  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace directory target with symlink: ${target_path}"
+  fi
+
   mkdir -p "$(dirname "${target_path}")"
   ln -sfn "${source_path}" "${target_path}"
 }
@@ -89,18 +93,32 @@ prepare_link_target() {
 write_zsh_loader() {
   local target_path="$1"
   local source_path="$2"
+  local target_dir
+  local temp_path
 
-  printf 'source "%s"\n' "${source_path}" > "${target_path}"
+  target_dir="$(dirname "${target_path}")"
+  mkdir -p "${target_dir}"
+  temp_path="$(mktemp "${target_dir}/.ghostconsole-zsh.XXXXXX")"
+
+  printf 'source "%s"\n' "${source_path}" > "${temp_path}"
+  mv -f "${temp_path}" "${target_path}"
 }
 
 write_git_loader() {
   local target_path="$1"
   local source_path="$2"
+  local target_dir
+  local temp_path
 
-  cat > "${target_path}" <<EOF
+  target_dir="$(dirname "${target_path}")"
+  mkdir -p "${target_dir}"
+  temp_path="$(mktemp "${target_dir}/.ghostconsole-git.XXXXXX")"
+
+  cat > "${temp_path}" <<EOF
 [include]
     path = ${source_path}
 EOF
+  mv -f "${temp_path}" "${target_path}"
 }
 
 main() {
