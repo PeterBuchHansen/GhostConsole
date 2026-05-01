@@ -80,6 +80,42 @@ test_detect_platform_macos_uses_brew() {
   pass
 }
 
+test_build_install_commands_macos_orders_ghostty_first() {
+  local commands
+
+  commands="$(build_install_commands "macos" "" "" "")"
+
+  assert_eq $'brew install --cask ghostty\nbrew install zsh git' "${commands}" "macos install commands should install Ghostty first"
+  pass
+}
+
+test_build_install_commands_ubuntu_adds_ghostty_ppa_when_missing() {
+  local commands
+
+  commands="$(build_install_commands "linux" "ubuntu" "missing" "")"
+
+  assert_eq $'sudo apt-get update\nsudo apt-get install -y software-properties-common curl gpg\nsudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu\nsudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "ubuntu install commands should add the Ghostty PPA before package install"
+  pass
+}
+
+test_build_install_commands_debian_adds_griffo_repo_when_missing() {
+  local commands
+
+  commands="$(build_install_commands "linux" "debian" "missing" "bookworm")"
+
+  assert_eq $'sudo apt-get update\nsudo apt-get install -y curl gpg lsb-release\nsudo mkdir -p /usr/share/keyrings\ncurl -fsSL https://debian.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor -o /usr/share/keyrings/debian.griffo.io.gpg\necho "deb [signed-by=/usr/share/keyrings/debian.griffo.io.gpg] https://debian.griffo.io/apt bookworm main" | sudo tee /etc/apt/sources.list.d/debian.griffo.io.list > /dev/null\nsudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "debian install commands should add the Ghostty repo before package install"
+  pass
+}
+
+test_build_install_commands_linux_with_ghostty_present_skips_repo_setup() {
+  local commands
+
+  commands="$(build_install_commands "linux" "ubuntu" "present" "noble")"
+
+  assert_eq $'sudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "linux install commands should skip repo setup when Ghostty is already available"
+  pass
+}
+
 test_package_manager_for_missing_arg_uses_controlled_error() {
   local output
 
@@ -485,6 +521,10 @@ test_write_git_loader_rejects_symlink_to_directory_target() {
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
+test_build_install_commands_macos_orders_ghostty_first
+test_build_install_commands_ubuntu_adds_ghostty_ppa_when_missing
+test_build_install_commands_debian_adds_griffo_repo_when_missing
+test_build_install_commands_linux_with_ghostty_present_skips_repo_setup
 test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main
 test_backup_existing_target_moves_it_to_backup_root
