@@ -96,6 +96,10 @@ write_zsh_loader() {
   local target_dir
   local temp_path
 
+  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace directory target with zsh loader: ${target_path}"
+  fi
+
   target_dir="$(dirname "${target_path}")"
   mkdir -p "${target_dir}"
   temp_path="$(mktemp "${target_dir}/.ghostconsole-zsh.XXXXXX")"
@@ -109,6 +113,10 @@ write_git_loader() {
   local source_path="$2"
   local target_dir
   local temp_path
+
+  if [[ -d "${target_path}" && ! -L "${target_path}" ]]; then
+    die "refusing to replace directory target with git loader: ${target_path}"
+  fi
 
   target_dir="$(dirname "${target_path}")"
   mkdir -p "${target_dir}"
