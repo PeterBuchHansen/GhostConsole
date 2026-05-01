@@ -102,6 +102,10 @@ write_zsh_loader() {
   local target_dir
   local temp_path
 
+  if [[ -L "${target_path}" && -d "${target_path}" ]]; then
+    die "refusing to replace symlink-to-directory target with zsh loader: ${target_path}"
+  fi
+
   if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
     die "refusing to replace existing non-symlink target with zsh loader: ${target_path}"
   fi
@@ -119,6 +123,10 @@ write_git_loader() {
   local source_path="$2"
   local target_dir
   local temp_path
+
+  if [[ -L "${target_path}" && -d "${target_path}" ]]; then
+    die "refusing to replace symlink-to-directory target with git loader: ${target_path}"
+  fi
 
   if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
     die "refusing to replace existing non-symlink target with git loader: ${target_path}"
