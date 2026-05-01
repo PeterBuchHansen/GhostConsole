@@ -325,12 +325,18 @@ verify_installation() {
 
 verify_links() {
   local root
+  local zsh_loader
+  local git_loader
 
   root="$(repo_root)"
+  zsh_loader="source \"${root}/.config/zsh/.zshrc\""
+  git_loader=$'[include]\n    path = '"${root}"'/.config/git/config'
 
   [[ -L "${HOME}/.config/ghostty" ]] && [[ "$(readlink "${HOME}/.config/ghostty")" == "${root}/.config/ghostty" ]] || die "ghostty config link is incorrect"
   [[ -L "${HOME}/.config/zsh" ]] && [[ "$(readlink "${HOME}/.config/zsh")" == "${root}/.config/zsh" ]] || die "zsh config link is incorrect"
   [[ -L "${HOME}/.config/git" ]] && [[ "$(readlink "${HOME}/.config/git")" == "${root}/.config/git" ]] || die "git config link is incorrect"
+  [[ -f "${HOME}/.zshrc" ]] && [[ "$(< "${HOME}/.zshrc")" == "${zsh_loader}" ]] || die "~/.zshrc loader is incorrect"
+  [[ -f "${HOME}/.gitconfig" ]] && [[ "$(< "${HOME}/.gitconfig")" == "${git_loader}" ]] || die "~/.gitconfig loader is incorrect"
 }
 
 print_summary() {
