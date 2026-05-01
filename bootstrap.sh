@@ -95,12 +95,16 @@ build_install_commands() {
                 'sudo apt-get update'
               ;;
             debian)
+              [[ -n "${version_codename}" ]] || die "missing debian version codename for ghostty install fallback"
               printf '%s\n' \
                 'sudo apt-get install -y curl gpg lsb-release' \
                 'sudo mkdir -p /usr/share/keyrings' \
                 'curl -fsSL https://debian.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor -o /usr/share/keyrings/debian.griffo.io.gpg' \
                 "echo \"deb [signed-by=/usr/share/keyrings/debian.griffo.io.gpg] https://debian.griffo.io/apt ${version_codename} main\" | sudo tee /etc/apt/sources.list.d/debian.griffo.io.list > /dev/null" \
                 'sudo apt-get update'
+              ;;
+            *)
+              die "unsupported linux distro for ghostty install fallback: ${distro_id:-unknown}"
               ;;
           esac
           ;;
@@ -114,6 +118,12 @@ build_install_commands() {
       die "unsupported install target: ${platform}"
       ;;
   esac
+}
+
+run_install_command() {
+  local command="${1-}"
+
+  env -u BASH_ENV bash --noprofile --norc -c "${command}"
 }
 
 run_install_commands() {
@@ -134,7 +144,7 @@ run_install_commands() {
 
   while IFS= read -r command; do
     [[ -n "${command}" ]] || continue
-    bash -lc "${command}"
+    run_install_command "${command}"
   done < <(build_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}")
 }
 
