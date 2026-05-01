@@ -46,6 +46,63 @@ required_packages() {
   printf '%s\n' ghostty zsh git
 }
 
+backup_existing_target() {
+  local target_path="$1"
+  local backup_root="$2"
+  local basename_no_dot
+  local stamp
+  local backup_path
+
+  [[ -e "${target_path}" || -L "${target_path}" ]] || return 0
+
+  mkdir -p "${backup_root}"
+  basename_no_dot="$(basename "${target_path}" | sed 's/^\.//')"
+  stamp="${GHOSTCONSOLE_TIMESTAMP:-$(date +%Y%m%d-%H%M%S)}"
+  backup_path="${backup_root}/${basename_no_dot}-${stamp}"
+
+  mv "${target_path}" "${backup_path}"
+  log "backed up ${target_path} to ${backup_path}"
+}
+
+ensure_symlink() {
+  local source_path="$1"
+  local target_path="$2"
+
+  mkdir -p "$(dirname "${target_path}")"
+  ln -sfn "${source_path}" "${target_path}"
+}
+
+prepare_link_target() {
+  local target_path="$1"
+  local source_path="$2"
+  local backup_root="$3"
+
+  if [[ -L "${target_path}" ]] && [[ "$(readlink "${target_path}")" == "${source_path}" ]]; then
+    return 0
+  fi
+
+  if [[ -e "${target_path}" || -L "${target_path}" ]]; then
+    backup_existing_target "${target_path}" "${backup_root}"
+  fi
+}
+
+write_zsh_loader() {
+  local target_path="$1"
+  local source_path="$2"
+
+  printf 'source "%s"\n' "${source_path}" > "${target_path}"
+}
+
+write_git_loader() {
+  local target_path="$1"
+  local source_path="$2"
+
+  cat > "${target_path}" <<EOF
+[include]
+    path = ${source_path}
+EOF
+}
+
 main() {
   local platform
 
