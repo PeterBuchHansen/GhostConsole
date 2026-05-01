@@ -102,10 +102,94 @@ test_sourcing_bootstrap_does_not_run_main() {
   pass
 }
 
+test_backup_existing_target_moves_it_to_backup_root() {
+  local workdir
+  local target
+  local backup_root
+
+  workdir="$(mktemp -d)"
+  target="${workdir}/.zshrc"
+  backup_root="${workdir}/backups"
+
+  printf 'legacy-zsh\n' > "${target}"
+  GHOSTCONSOLE_TIMESTAMP="20260424-120000" backup_existing_target "${target}" "${backup_root}"
+
+  [[ ! -e "${target}" ]] || fail "target should be moved out of the way"
+  [[ -f "${backup_root}/zshrc-20260424-120000" ]] || fail "backup should be created"
+  pass
+}
+
+test_ensure_symlink_creates_expected_link() {
+  local workdir
+  local source_path
+  local target_path
+
+  workdir="$(mktemp -d)"
+  source_path="${workdir}/source"
+  target_path="${workdir}/target"
+
+  mkdir -p "${source_path}"
+  ensure_symlink "${source_path}" "${target_path}"
+
+  [[ -L "${target_path}" ]] || fail "target should be a symlink"
+  assert_eq "${source_path}" "$(readlink "${target_path}")" "target should point to source"
+  pass
+}
+
+test_prepare_link_target_backs_up_existing_directory() {
+  local workdir
+  local target_path
+  local backup_root
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/ghostty"
+  backup_root="${workdir}/backups"
+
+  mkdir -p "${target_path}"
+  printf 'legacy\n' > "${target_path}/config"
+
+  GHOSTCONSOLE_TIMESTAMP="20260424-120000" prepare_link_target "${target_path}" "/repo/.config/ghostty" "${backup_root}"
+
+  [[ ! -d "${target_path}" ]] || fail "existing directory should be moved before linking"
+  [[ -d "${backup_root}/ghostty-20260424-120000" ]] || fail "directory backup should be created"
+  pass
+}
+
+test_write_zsh_loader_sources_repo_config() {
+  local workdir
+  local target_path
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.zshrc"
+
+  write_zsh_loader "${target_path}" "/repo/.config/zsh/.zshrc"
+
+  assert_eq 'source "/repo/.config/zsh/.zshrc"' "$(< "${target_path}")" "zsh loader should source repo config"
+  pass
+}
+
+test_write_git_loader_includes_repo_config() {
+  local workdir
+  local target_path
+
+  workdir="$(mktemp -d)"
+  target_path="${workdir}/.gitconfig"
+
+  write_git_loader "${target_path}" "/repo/.config/git/config"
+
+  assert_eq $'[include]\n    path = /repo/.config/git/config' "$(< "${target_path}")" "git loader should include repo config"
+  pass
+}
+
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
 test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main
+test_backup_existing_target_moves_it_to_backup_root
+test_ensure_symlink_creates_expected_link
+test_prepare_link_target_backs_up_existing_directory
+test_write_zsh_loader_sources_repo_config
+test_write_git_loader_includes_repo_config
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
