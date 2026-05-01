@@ -116,6 +116,59 @@ test_build_install_commands_linux_with_ghostty_present_skips_repo_setup() {
   pass
 }
 
+test_build_install_commands_rejects_unsupported_linux_fallback() {
+  local output
+
+  if output="$(bash -c 'source "$1"; build_install_commands "linux" "fedora" "missing" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "unsupported linux fallback should fail"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "unsupported linux fallback should use script error handling"
+  assert_contains "unsupported linux distro for ghostty install fallback: fedora" "${output}" "unsupported linux fallback should explain the distro rejection"
+  pass
+}
+
+test_build_install_commands_rejects_missing_debian_codename() {
+  local output
+
+  if output="$(bash -c 'source "$1"; build_install_commands "linux" "debian" "missing" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "debian fallback without codename should fail"
+  fi
+
+  assert_contains "[ghostconsole] error:" "${output}" "missing debian codename should use script error handling"
+  assert_contains "missing debian version codename for ghostty install fallback" "${output}" "missing debian codename should explain the failure"
+  pass
+}
+
+test_run_install_commands_executes_without_bash_env_side_effects() {
+  local workdir
+  local bash_env_path
+  local marker_path
+  local output
+
+  workdir="$(mktemp -d)"
+  bash_env_path="${workdir}/bash_env.sh"
+  marker_path="${workdir}/bash_env_marker"
+
+  printf 'printf side-effect > "%s"\n' "${marker_path}" > "${bash_env_path}"
+
+  output="$(bash -c '
+    source "$1"
+    build_install_commands() {
+      printf "%s\n" \
+        "printf first" \
+        "printf -- \"|%s\" \"\$RUN_INSTALL_SENTINEL\""
+    }
+    export RUN_INSTALL_SENTINEL="second"
+    export BASH_ENV="$2"
+    run_install_commands "macos" "" "" ""
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${bash_env_path}")"
+
+  assert_eq "first|second" "${output}" "run_install_commands should execute helper commands in order"
+  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not source BASH_ENV side effects"
+  pass
+}
+
 test_package_manager_for_missing_arg_uses_controlled_error() {
   local output
 
@@ -525,6 +578,9 @@ test_build_install_commands_macos_orders_ghostty_first
 test_build_install_commands_ubuntu_adds_ghostty_ppa_when_missing
 test_build_install_commands_debian_adds_griffo_repo_when_missing
 test_build_install_commands_linux_with_ghostty_present_skips_repo_setup
+test_build_install_commands_rejects_unsupported_linux_fallback
+test_build_install_commands_rejects_missing_debian_codename
+test_run_install_commands_executes_without_bash_env_side_effects
 test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main
 test_backup_existing_target_moves_it_to_backup_root
