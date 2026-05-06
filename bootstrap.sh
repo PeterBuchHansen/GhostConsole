@@ -72,10 +72,8 @@ install_linux_packages() {
   # Override for automated tests only; production reads /etc/os-release (ID=).
   local distro_id="${GHOSTCONSOLE_LINUX_ID-}"
 
-  if [[ -z "${distro_id}" ]]; then
-    if [[ -r /etc/os-release ]]; then
-      distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
-    fi
+  if [[ -z "${distro_id}" && -r /etc/os-release ]]; then
+    distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
   fi
 
   case "${distro_id}" in
