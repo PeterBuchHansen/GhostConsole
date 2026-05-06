@@ -62,6 +62,7 @@ linux_distro_id() {
 
 install_packages() {
   local platform
+  local distro_id=''
 
   platform="$(detect_platform)"
 
@@ -70,21 +71,20 @@ install_packages() {
       macos_install
       ;;
     linux)
-      require_ubuntu_linux
-      linux_ubuntu_install
+      distro_id="$(linux_distro_id)"
+      case "${distro_id}" in
+        ubuntu)
+          linux_ubuntu_install
+          ;;
+        *)
+          die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${distro_id:-unknown})"
+          ;;
+      esac
       ;;
     *)
       die "unsupported install target: ${platform}"
       ;;
   esac
-}
-
-require_ubuntu_linux() {
-  local id
-
-  id="$(linux_distro_id)"
-
-  [[ "${id}" == ubuntu ]] || die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${id:-unknown})"
 }
 
 macos_install() {
