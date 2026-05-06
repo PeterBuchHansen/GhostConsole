@@ -50,19 +50,8 @@ ghostty_available_in_apt() {
   apt-cache show ghostty >/dev/null 2>&1
 }
 
-linux_distro_id() {
-  local distro_id=''
-
-  if [[ -r /etc/os-release ]]; then
-    distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
-  fi
-
-  printf '%s\n' "${distro_id}"
-}
-
 install_packages() {
   local platform
-  local distro_id=''
 
   platform="$(detect_platform)"
 
@@ -71,18 +60,30 @@ install_packages() {
       macos_install
       ;;
     linux)
-      distro_id="$(linux_distro_id)"
-      case "${distro_id}" in
-        ubuntu)
-          linux_ubuntu_install
-          ;;
-        *)
-          die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${distro_id:-unknown})"
-          ;;
-      esac
+      install_linux_packages
       ;;
     *)
       die "unsupported install target: ${platform}"
+      ;;
+  esac
+}
+
+install_linux_packages() {
+  # Override for automated tests only; production reads /etc/os-release (ID=).
+  local distro_id="${GHOSTCONSOLE_LINUX_ID-}"
+
+  if [[ -z "${distro_id}" ]]; then
+    if [[ -r /etc/os-release ]]; then
+      distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+    fi
+  fi
+
+  case "${distro_id}" in
+    ubuntu)
+      linux_ubuntu_install
+      ;;
+    *)
+      die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${distro_id:-unknown})"
       ;;
   esac
 }

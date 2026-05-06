@@ -139,12 +139,11 @@ test_linux_ubuntu_install_skips_ppa_when_ghostty_already_in_apt() {
 test_main_rejects_linux_non_ubuntu_before_install() {
   local output
 
-  if output="$(bash -c '
+  if output="$(GHOSTCONSOLE_LINUX_ID=debian bash -c '
     source "$1"
     macos_install() { printf SHOULD_NOT_EXEC_MACOS >&2; exit 99; }
     linux_ubuntu_install() { printf SHOULD_NOT_EXEC_U >&2; exit 98; }
     detect_platform() { echo linux; }
-    linux_distro_id() { echo debian; }
     main
   ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
     fail "non-Ubuntu Linux should not complete main"
@@ -772,7 +771,6 @@ test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
 
   repo_root() { printf '%s\n' "/repo"; }
   detect_platform() { printf 'linux\n'; }
-  linux_distro_id() { printf 'ubuntu\n'; }
   install_packages() {
     printf 'install:ubuntu\n' >> "${trace_file}"
   }
@@ -800,7 +798,6 @@ test_main_does_not_print_summary_when_verification_fails() {
   if output="$(TRACE_FILE="${trace_file}" bash -c '
     source "$1"
     detect_platform() { printf "linux\n"; }
-    linux_distro_id() { printf "ubuntu\n"; }
     install_packages() { printf "install\n" >> "${TRACE_FILE}"; }
     ensure_managed_paths() { printf "paths\n" >> "${TRACE_FILE}"; }
     link_repo_config() { printf "links\n" >> "${TRACE_FILE}"; }
