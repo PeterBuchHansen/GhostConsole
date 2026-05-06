@@ -80,93 +80,83 @@ test_detect_platform_macos_uses_brew() {
   pass
 }
 
-test_build_install_commands_macos_orders_ghostty_first() {
-  local commands
+test_macos_install_invokes_ghostty_first() {
+  local -a calls=()
 
-  commands="$(build_install_commands "macos" "" "" "")"
+  run_install_command() {
+    calls+=("$1")
+  }
 
-  assert_eq $'brew install --cask ghostty\nbrew install zsh git' "${commands}" "macos install commands should install Ghostty first"
+  command() {
+    if [[ "$1" == "-v" && "$2" == "brew" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  macos_install
+
+  [[ "${#calls[@]}" == 2 ]] || fail "macos_install should run two install commands"
+  assert_eq 'brew install --cask ghostty' "${calls[0]}" "macos_install should install Ghostty first"
+  assert_eq 'brew install zsh git' "${calls[1]}" "macos_install should install zsh and git after Ghostty"
   pass
 }
 
-test_build_install_commands_ubuntu_adds_ghostty_ppa_when_missing() {
-  local commands
+test_linux_ubuntu_install_adds_ppa_when_ghostty_missing() {
+  local -a calls=()
 
-  commands="$(build_install_commands "linux" "ubuntu" "missing" "")"
+  run_install_command() {
+    calls+=("$1")
+  }
 
-  assert_eq $'sudo apt-get update\nsudo apt-get install -y software-properties-common curl gpg\nsudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu\nsudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "ubuntu install commands should add the Ghostty PPA before package install"
+  ghostty_available_in_apt() {
+    return 1
+  }
+
+  linux_ubuntu_install
+
+  assert_eq $'sudo apt-get update\nsudo apt-get install -y software-properties-common curl gpg\nsudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu\nsudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "$(printf '%s\n' "${calls[@]}")" "ubuntu flow should refresh apt, optionally add Ghostty source, install Ghostty first"
   pass
 }
 
-test_build_install_commands_debian_adds_griffo_repo_when_missing() {
-  local commands
+test_linux_ubuntu_install_skips_ppa_when_ghostty_already_in_apt() {
+  local -a calls=()
 
-  commands="$(build_install_commands "linux" "debian" "missing" "bookworm")"
+  run_install_command() {
+    calls+=("$1")
+  }
 
-  assert_eq $'sudo apt-get update\nsudo apt-get install -y curl gpg lsb-release\nsudo mkdir -p /usr/share/keyrings\ncurl -fsSL https://debian.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor -o /usr/share/keyrings/debian.griffo.io.gpg\necho "deb [signed-by=/usr/share/keyrings/debian.griffo.io.gpg] https://debian.griffo.io/apt bookworm main" | sudo tee /etc/apt/sources.list.d/debian.griffo.io.list > /dev/null\nsudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "debian install commands should add the Ghostty repo before package install"
+  ghostty_available_in_apt() {
+    return 0
+  }
+
+  linux_ubuntu_install
+
+  assert_eq $'sudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "$(printf '%s\n' "${calls[@]}")" "ubuntu flow should skip PPA setup when Ghostty is already packaged"
   pass
 }
 
-test_build_install_commands_linux_with_ghostty_present_skips_repo_setup() {
-  local commands
-
-  commands="$(build_install_commands "linux" "ubuntu" "present" "noble")"
-
-  assert_eq $'sudo apt-get update\nsudo apt-get install -y ghostty\nsudo apt-get install -y zsh git' "${commands}" "linux install commands should skip repo setup when Ghostty is already available"
-  pass
-}
-
-test_build_install_commands_rejects_unsupported_linux_fallback() {
+test_main_rejects_linux_non_ubuntu_before_install() {
   local output
 
-  if output="$(bash -c 'source "$1"; build_install_commands "linux" "fedora" "missing" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
-    fail "unsupported linux fallback should fail"
+  if output="$(bash -c '
+    source "$1"
+    macos_install() { printf SHOULD_NOT_EXEC_MACOS >&2; exit 99; }
+    linux_ubuntu_install() { printf SHOULD_NOT_EXEC_U >&2; exit 98; }
+    detect_platform() { echo linux; }
+    linux_distro_id() { echo debian; }
+    main
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "non-Ubuntu Linux should not complete main"
   fi
 
-  assert_contains "[ghostconsole] error:" "${output}" "unsupported linux fallback should use script error handling"
-  assert_contains "unsupported linux distro for ghostty install fallback: fedora" "${output}" "unsupported linux fallback should explain the distro rejection"
+  assert_contains "[ghostconsole] error:" "${output}" "non-Ubuntu Linux should surface a script error"
+  assert_contains 'Linux bootstrap supports only Ubuntu' "${output}" "non-Ubuntu Linux should explain supported distros"
+  assert_not_contains "SHOULD_NOT_EXEC" "${output}" "install hooks should never run before distro check"
   pass
 }
 
-test_build_install_commands_rejects_missing_debian_codename() {
-  local output
-
-  if output="$(bash -c 'source "$1"; build_install_commands "linux" "debian" "missing" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
-    fail "debian fallback without codename should fail"
-  fi
-
-  assert_contains "[ghostconsole] error:" "${output}" "missing debian codename should use script error handling"
-  assert_contains "missing debian version codename for ghostty install fallback" "${output}" "missing debian codename should explain the failure"
-  pass
-}
-
-test_build_install_commands_rejects_unsafe_linux_distro_id_before_output() {
-  local output
-
-  if output="$(bash -c 'source "$1"; build_install_commands "linux" "ubuntu;touch /tmp/pwned" "present" ""' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
-    fail "unsafe linux distro id should fail"
-  fi
-
-  assert_contains "[ghostconsole] error:" "${output}" "unsafe linux distro id should use script error handling"
-  assert_contains "unsafe distro id: ubuntu;touch /tmp/pwned" "${output}" "unsafe linux distro id should explain the rejection"
-  assert_not_contains "sudo apt-get update" "${output}" "unsafe linux distro id should fail before command construction"
-  pass
-}
-
-test_build_install_commands_rejects_unsafe_debian_codename_before_output() {
-  local output
-
-  if output="$(bash -c 'source "$1"; build_install_commands "linux" "debian" "missing" "bookworm;touch /tmp/pwned"' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
-    fail "unsafe Debian codename should fail"
-  fi
-
-  assert_contains "[ghostconsole] error:" "${output}" "unsafe Debian codename should use script error handling"
-  assert_contains "unsafe version codename: bookworm;touch /tmp/pwned" "${output}" "unsafe Debian codename should explain the rejection"
-  assert_not_contains "sudo apt-get update" "${output}" "unsafe Debian codename should fail before command construction"
-  pass
-}
-
-test_run_install_commands_executes_without_bash_env_side_effects() {
+test_macos_install_uses_runner_without_bash_env_side_effects() {
   local workdir
   local bash_env_path
   local marker_path
@@ -180,66 +170,21 @@ test_run_install_commands_executes_without_bash_env_side_effects() {
 
   output="$(bash -c '
     source "$1"
-    build_install_commands() {
-      printf "%s\n" \
-        "printf first" \
-        "printf -- \"|%s\" \"\$RUN_INSTALL_SENTINEL\""
+    macos_install() {
+      run_install_command "printf first"
+      run_install_command "printf -- \"|%s\" \"\$RUN_INSTALL_SENTINEL\""
+    }
+    command() {
+      [[ "$1" == "-v" && "$2" == "brew" ]] && return 0
+      builtin command "$@"
     }
     export RUN_INSTALL_SENTINEL="second"
     export BASH_ENV="$2"
-    run_install_commands "macos" "" "" ""
+    macos_install
   ' _ "${REPO_ROOT}/bootstrap.sh" "${bash_env_path}")"
 
-  assert_eq "first|second" "${output}" "run_install_commands should execute helper commands in order"
-  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not source BASH_ENV side effects"
-  pass
-}
-
-test_run_install_commands_rejects_unsupported_linux_fallback_before_execution() {
-  local workdir
-  local marker_path
-  local output
-
-  workdir="$(mktemp -d)"
-  marker_path="${workdir}/executed"
-
-  if output="$(bash -c '
-    source "$1"
-    run_install_command() {
-      printf executed > "$2"
-    }
-    run_install_commands "linux" "fedora" "missing" ""
-  ' _ "${REPO_ROOT}/bootstrap.sh" "${marker_path}" 2>&1)"; then
-    fail "run_install_commands should fail for unsupported linux fallback"
-  fi
-
-  assert_contains "[ghostconsole] error:" "${output}" "unsupported linux fallback should use script error handling"
-  assert_contains "unsupported linux distro for ghostty install fallback: fedora" "${output}" "unsupported linux fallback should explain the distro rejection"
-  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not execute any command before rejecting unsupported linux fallback"
-  pass
-}
-
-test_run_install_commands_rejects_missing_debian_codename_before_execution() {
-  local workdir
-  local marker_path
-  local output
-
-  workdir="$(mktemp -d)"
-  marker_path="${workdir}/executed"
-
-  if output="$(bash -c '
-    source "$1"
-    run_install_command() {
-      printf executed > "$2"
-    }
-    run_install_commands "linux" "debian" "missing" ""
-  ' _ "${REPO_ROOT}/bootstrap.sh" "${marker_path}" 2>&1)"; then
-    fail "run_install_commands should fail when Debian codename is missing"
-  fi
-
-  assert_contains "[ghostconsole] error:" "${output}" "missing Debian codename should use script error handling"
-  assert_contains "missing debian version codename for ghostty install fallback" "${output}" "missing Debian codename should explain the failure"
-  [[ ! -e "${marker_path}" ]] || fail "run_install_commands should not execute any command before rejecting missing Debian codename"
+  assert_eq "first|second" "${output}" "macos_install should execute commands through run_install_command in order"
+  [[ ! -e "${marker_path}" ]] || fail "installer should not source BASH_ENV side effects during command runs"
   pass
 }
 
@@ -828,10 +773,8 @@ test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
   repo_root() { printf '%s\n' "/repo"; }
   detect_platform() { printf 'linux\n'; }
   linux_distro_id() { printf 'ubuntu\n'; }
-  linux_version_codename() { printf 'noble\n'; }
-  ghostty_available_in_apt() { return 1; }
-  run_install_commands() {
-    printf 'install:%s:%s:%s:%s\n' "$1" "$2" "$3" "$4" >> "${trace_file}"
+  install_packages() {
+    printf 'install:ubuntu\n' >> "${trace_file}"
   }
   ensure_managed_paths() { printf 'paths\n' >> "${trace_file}"; }
   link_repo_config() { printf 'links\n' >> "${trace_file}"; }
@@ -842,7 +785,7 @@ test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
 
   main
 
-  assert_eq $'install:linux:ubuntu:missing:noble\npaths\nlinks\nentrypoints\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main should install before linking and verify before summary"
+  assert_eq $'install:ubuntu\npaths\nlinks\nentrypoints\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main should install before linking and verify before summary"
   pass
 }
 
@@ -858,9 +801,7 @@ test_main_does_not_print_summary_when_verification_fails() {
     source "$1"
     detect_platform() { printf "linux\n"; }
     linux_distro_id() { printf "ubuntu\n"; }
-    linux_version_codename() { printf "noble\n"; }
-    ghostty_available_in_apt() { return 0; }
-    run_install_commands() { printf "install\n" >> "${TRACE_FILE}"; }
+    install_packages() { printf "install\n" >> "${TRACE_FILE}"; }
     ensure_managed_paths() { printf "paths\n" >> "${TRACE_FILE}"; }
     link_repo_config() { printf "links\n" >> "${TRACE_FILE}"; }
     write_home_entrypoints() { printf "entrypoints\n" >> "${TRACE_FILE}"; }
@@ -883,17 +824,11 @@ test_main_does_not_print_summary_when_verification_fails() {
 test_detect_platform_linux_uses_apt
 test_required_packages_start_with_ghostty
 test_detect_platform_macos_uses_brew
-test_build_install_commands_macos_orders_ghostty_first
-test_build_install_commands_ubuntu_adds_ghostty_ppa_when_missing
-test_build_install_commands_debian_adds_griffo_repo_when_missing
-test_build_install_commands_linux_with_ghostty_present_skips_repo_setup
-test_build_install_commands_rejects_unsupported_linux_fallback
-test_build_install_commands_rejects_missing_debian_codename
-test_build_install_commands_rejects_unsafe_linux_distro_id_before_output
-test_build_install_commands_rejects_unsafe_debian_codename_before_output
-test_run_install_commands_executes_without_bash_env_side_effects
-test_run_install_commands_rejects_unsupported_linux_fallback_before_execution
-test_run_install_commands_rejects_missing_debian_codename_before_execution
+test_macos_install_invokes_ghostty_first
+test_linux_ubuntu_install_adds_ppa_when_ghostty_missing
+test_linux_ubuntu_install_skips_ppa_when_ghostty_already_in_apt
+test_main_rejects_linux_non_ubuntu_before_install
+test_macos_install_uses_runner_without_bash_env_side_effects
 test_run_install_command_ignores_exported_function_hijacking
 test_package_manager_for_missing_arg_uses_controlled_error
 test_sourcing_bootstrap_does_not_run_main

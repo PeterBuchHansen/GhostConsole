@@ -60,73 +60,53 @@ linux_distro_id() {
   printf '%s\n' "${distro_id}"
 }
 
-linux_version_codename() {
-  local version_codename=''
+install_packages() {
+  local platform
 
-  if [[ -r /etc/os-release ]]; then
-    version_codename="$(. /etc/os-release && printf '%s' "${VERSION_CODENAME:-}")"
-  fi
-
-  printf '%s\n' "${version_codename}"
-}
-
-validate_linux_install_inputs() {
-  local distro_id="${1-}"
-  local version_codename="${2-}"
-
-  [[ -z "${distro_id}" || "${distro_id}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe distro id: ${distro_id}"
-  [[ -z "${version_codename}" || "${version_codename}" =~ ^[a-z0-9][a-z0-9-]*$ ]] || die "unsafe version codename: ${version_codename}"
-}
-
-build_install_commands() {
-  local platform="${1-}"
-  local distro_id="${2-}"
-  local ghostty_state="${3-}"
-  local version_codename="${4-}"
+  platform="$(detect_platform)"
 
   case "${platform}" in
     macos)
-      printf '%s\n' \
-        'brew install --cask ghostty' \
-        'brew install zsh git'
+      macos_install
       ;;
     linux)
-      validate_linux_install_inputs "${distro_id}" "${version_codename}"
-      printf '%s\n' 'sudo apt-get update'
-
-      case "${ghostty_state}" in
-        missing)
-          case "${distro_id}" in
-            ubuntu)
-              printf '%s\n' \
-                'sudo apt-get install -y software-properties-common curl gpg' \
-                'sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu' \
-                'sudo apt-get update'
-              ;;
-            debian)
-              [[ -n "${version_codename}" ]] || die "missing debian version codename for ghostty install fallback"
-              printf '%s\n' \
-                'sudo apt-get install -y curl gpg lsb-release' \
-                'sudo mkdir -p /usr/share/keyrings' \
-                'curl -fsSL https://debian.griffo.io/EA0F721D231FDD3A0A17B9AC7808B4DD62C41256.asc | sudo gpg --dearmor -o /usr/share/keyrings/debian.griffo.io.gpg' \
-                "echo \"deb [signed-by=/usr/share/keyrings/debian.griffo.io.gpg] https://debian.griffo.io/apt ${version_codename} main\" | sudo tee /etc/apt/sources.list.d/debian.griffo.io.list > /dev/null" \
-                'sudo apt-get update'
-              ;;
-            *)
-              die "unsupported linux distro for ghostty install fallback: ${distro_id:-unknown}"
-              ;;
-          esac
-          ;;
-      esac
-
-      printf '%s\n' \
-        'sudo apt-get install -y ghostty' \
-        'sudo apt-get install -y zsh git'
+      require_ubuntu_linux
+      linux_ubuntu_install
       ;;
     *)
       die "unsupported install target: ${platform}"
       ;;
   esac
+}
+
+require_ubuntu_linux() {
+  local id
+
+  id="$(linux_distro_id)"
+
+  [[ "${id}" == ubuntu ]] || die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${id:-unknown})"
+}
+
+macos_install() {
+  command -v brew >/dev/null 2>&1 || die "Homebrew is required on macOS. Install it from https://brew.sh before running GhostConsole."
+
+  log "Installing packages on macOS (Ghostty first)..."
+  run_install_command 'brew install --cask ghostty'
+  run_install_command 'brew install zsh git'
+}
+
+linux_ubuntu_install() {
+  log "Installing packages on Ubuntu (Ghostty first)..."
+  run_install_command 'sudo apt-get update'
+
+  if ! ghostty_available_in_apt; then
+    run_install_command 'sudo apt-get install -y software-properties-common curl gpg'
+    run_install_command 'sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu'
+    run_install_command 'sudo apt-get update'
+  fi
+
+  run_install_command 'sudo apt-get install -y ghostty'
+  run_install_command 'sudo apt-get install -y zsh git'
 }
 
 run_install_command() {
@@ -138,30 +118,6 @@ run_install_command() {
     done < <(compgen -A function)
     builtin eval -- "$1"
   ' _ "${command}"
-}
-
-run_install_commands() {
-  local platform="${1-}"
-  local distro_id="${2-}"
-  local ghostty_state="${3-}"
-  local version_codename="${4-}"
-  local install_commands=''
-  local command
-
-  case "${platform}" in
-    macos|'')
-      ;;
-    linux)
-      validate_linux_install_inputs "${distro_id}" "${version_codename}"
-      ;;
-  esac
-
-  install_commands="$(build_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}")" || return $?
-
-  while IFS= read -r command; do
-    [[ -n "${command}" ]] || continue
-    run_install_command "${command}"
-  done <<< "${install_commands}"
 }
 
 backup_existing_target() {
@@ -348,23 +304,7 @@ EOF
 }
 
 main() {
-  local platform
-  local distro_id=''
-  local ghostty_state='present'
-  local version_codename=''
-
-  platform="$(detect_platform)"
-
-  if [[ "${platform}" == "linux" ]]; then
-    distro_id="$(linux_distro_id)"
-    version_codename="$(linux_version_codename)"
-
-    if ! ghostty_available_in_apt; then
-      ghostty_state='missing'
-    fi
-  fi
-
-  run_install_commands "${platform}" "${distro_id}" "${ghostty_state}" "${version_codename}"
+  install_packages
   ensure_managed_paths
   link_repo_config
   write_home_entrypoints
