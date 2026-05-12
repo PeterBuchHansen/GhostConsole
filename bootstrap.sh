@@ -1,110 +1,51 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-log() {
-  printf '[ghostconsole] %s\n' "$*"
-}
+GHOSTCONSOLE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+GHOSTCONSOLE_BACKUP_ROOT="${HOME}/.ghostconsole-backups"
 
-die() {
-  printf '[ghostconsole] error: %s\n' "$*" >&2
-  exit 1
-}
-
-detect_platform() {
-  local kernel="${1:-$(uname -s | tr '[:upper:]' '[:lower:]')}"
+install_packages() {
+  local kernel="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
   case "${kernel}" in
     darwin)
-      printf 'macos\n'
-      ;;
-    linux)
-      printf 'linux\n'
-      ;;
-    *)
-      die "unsupported platform: ${kernel}"
-      ;;
-  esac
-}
-
-package_manager_for() {
-  local platform="${1-}"
-
-  case "${platform}" in
-    macos)
-      printf 'brew\n'
-      ;;
-    linux)
-      printf 'apt\n'
-      ;;
-    *)
-      die "unsupported package manager target: ${platform}"
-      ;;
-  esac
-}
-
-required_packages() {
-  printf '%s\n' ghostty zsh git
-}
-
-ghostty_available_in_apt() {
-  apt-cache show ghostty >/dev/null 2>&1
-}
-
-install_packages() {
-  local platform
-
-  platform="$(detect_platform)"
-
-  case "${platform}" in
-    macos)
       macos_install
       ;;
     linux)
-      install_linux_packages
+      local distro_id; [[ ! -r /etc/os-release ]] || distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+
+      case "${distro_id}" in
+        ubuntu)
+          linux_ubuntu_install
+          ;;
+        *)
+          printf '[GhostConsole-Installer] error: Linux bootstrap supports only Ubuntu for now (detected id: '\''%s'\''); use Ubuntu or install/link configs yourself.\n' "${distro_id:-unknown}" >&2
+          exit 1
+          ;;
+      esac
       ;;
     *)
-      die "unsupported install target: ${platform}"
+      printf '[GhostConsole-Installer] error: unsupported kernel '\''%s'\'' (need darwin for macOS or linux with Ubuntu per /etc/os-release).\n' "${kernel}" >&2
+      exit 1
       ;;
   esac
 }
 
-install_linux_packages() {
-  # Override for automated tests only; production reads /etc/os-release (ID=).
-  local distro_id="${GHOSTCONSOLE_LINUX_ID-}"
-
-  if [[ -z "${distro_id}" && -r /etc/os-release ]]; then
-    distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
-  fi
-
-  case "${distro_id}" in
-    ubuntu)
-      linux_ubuntu_install
-      ;;
-    *)
-      die "Linux bootstrap supports only Ubuntu for now (detected distro id: ${distro_id:-unknown})"
-      ;;
-  esac
-}
 
 macos_install() {
-  command -v brew >/dev/null 2>&1 || die "Homebrew is required on macOS. Install it from https://brew.sh before running GhostConsole."
+  if ! command -v brew >/dev/null 2>&1; then
+    printf '[GhostConsole-Installer] error: Homebrew not in PATH on macOS — install from https://brew.sh then rerun bootstrap.\n' >&2
+    exit 1
+  fi
 
-  log "Installing packages on macOS (Ghostty first)..."
+  printf '[GhostConsole-Installer] %s\n' "Installing packages on macOS (Ghostty first)..."
   run_install_command 'brew install --cask ghostty'
   run_install_command 'brew install zsh git'
 }
 
 linux_ubuntu_install() {
-  log "Installing packages on Ubuntu (Ghostty first)..."
-  run_install_command 'sudo apt-get update'
-
-  if ! ghostty_available_in_apt; then
-    run_install_command 'sudo apt-get install -y software-properties-common curl gpg'
-    run_install_command 'sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu'
-    run_install_command 'sudo apt-get update'
-  fi
-
-  run_install_command 'sudo apt-get install -y ghostty'
+  printf '[GhostConsole-Installer] %s\n' "Installing packages on Ubuntu (Ghostty first)..."
+  run_install_command '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh)"'
   run_install_command 'sudo apt-get install -y zsh git'
 }
 
@@ -140,173 +81,160 @@ backup_existing_target() {
   done
 
   mv "${target_path}" "${backup_path}"
-  log "backed up ${target_path} to ${backup_path}"
-}
-
-ensure_symlink() {
-  local source_path="$1"
-  local target_path="$2"
-
-  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace existing non-symlink target with symlink: ${target_path}"
-  fi
-
-  mkdir -p "$(dirname "${target_path}")"
-  ln -sfn "${source_path}" "${target_path}"
+  printf '[GhostConsole-Installer] %s\n' "backed up ${target_path} to ${backup_path}"
 }
 
 prepare_link_target() {
-  local target_path="$1"
-  local source_path="$2"
-  local backup_root="$3"
+  local config_path="$1"
 
-  if [[ -L "${target_path}" ]] && [[ "$(readlink "${target_path}")" == "${source_path}" ]]; then
+  if [[ -L "${HOME}/${config_path}" ]] && [[ "$(readlink "${HOME}/${config_path}")" == "${GHOSTCONSOLE_ROOT}/${config_path}" ]]; then
     return 0
   fi
 
-  if [[ -e "${target_path}" || -L "${target_path}" ]]; then
-    backup_existing_target "${target_path}" "${backup_root}"
+  if [[ -e "${HOME}/${config_path}" || -L "${HOME}/${config_path}" ]]; then
+    backup_existing_target "${HOME}/${config_path}" "${GHOSTCONSOLE_BACKUP_ROOT}"
+  fi
+}
+
+ensure_symlink() {
+  local config_path="$1"
+
+  if [[ -e "${HOME}/${config_path}" && ! -L "${HOME}/${config_path}" ]]; then
+    printf '[GhostConsole-Installer] error: refusing symlink at %s: path exists but is not a symlink (move or delete, then rerun).\n' "${HOME}/${config_path}" >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "${HOME}/${config_path}")"
+  ln -sfn "${GHOSTCONSOLE_ROOT}/${config_path}" "${HOME}/${config_path}"
+}
+
+prepare_loader_target() {
+  local loader_path="$1"
+  local expected_contents="$2"
+
+  if [[ -L "${HOME}/${loader_path}" ]] || { [[ -e "${HOME}/${loader_path}" ]] && [[ "$(< "${HOME}/${loader_path}")" != "${expected_contents}" ]]; }; then
+    backup_existing_target "${HOME}/${loader_path}" "${GHOSTCONSOLE_BACKUP_ROOT}"
   fi
 }
 
 write_zsh_loader() {
-  local target_path="$1"
-  local source_path="$2"
-  local target_dir
-  local temp_path
-
-  if [[ -L "${target_path}" && -d "${target_path}" ]]; then
-    die "refusing to replace symlink-to-directory target with zsh loader: ${target_path}"
+  if [[ -L "${HOME}/.zshrc" && -d "${HOME}/.zshrc" ]]; then
+    printf '[GhostConsole-Installer] error: refusing zsh loader at %s: symlink points at a directory (fix or remove, then rerun).\n' "${HOME}/.zshrc" >&2
+    exit 1
   fi
 
-  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace existing non-symlink target with zsh loader: ${target_path}"
+  if [[ -e "${HOME}/.zshrc" && ! -L "${HOME}/.zshrc" ]]; then
+    printf '[GhostConsole-Installer] error: refusing zsh loader at %s: ordinary file blocks managed loader (backup or remove, then rerun).\n' "${HOME}/.zshrc" >&2
+    exit 1
   fi
 
-  target_dir="$(dirname "${target_path}")"
-  mkdir -p "${target_dir}"
-  temp_path="$(mktemp "${target_dir}/.ghostconsole-zsh.XXXXXX")"
+  if [[ -e "${HOME}/.zshrc" || -L "${HOME}/.zshrc" ]]; then
+    return 0
+  fi
 
-  printf 'source "%s"\n' "${source_path}" > "${temp_path}"
-  mv -f "${temp_path}" "${target_path}"
+  mkdir -p "$(dirname "${HOME}/.zshrc")"
+  printf 'source "%s/.config/zsh/.zshrc"\n' "${GHOSTCONSOLE_ROOT}" > "${HOME}/.zshrc"
 }
 
 write_git_loader() {
-  local target_path="$1"
-  local source_path="$2"
-  local target_dir
-  local temp_path
-
-  if [[ -L "${target_path}" && -d "${target_path}" ]]; then
-    die "refusing to replace symlink-to-directory target with git loader: ${target_path}"
+  if [[ -L "${HOME}/.gitconfig" && -d "${HOME}/.gitconfig" ]]; then
+    printf '[GhostConsole-Installer] error: refusing git loader at %s: symlink resolves to a directory (fix path, then rerun).\n' "${HOME}/.gitconfig" >&2
+    exit 1
   fi
 
-  if [[ -e "${target_path}" && ! -L "${target_path}" ]]; then
-    die "refusing to replace existing non-symlink target with git loader: ${target_path}"
+  if [[ -e "${HOME}/.gitconfig" && ! -L "${HOME}/.gitconfig" ]]; then
+    printf '[GhostConsole-Installer] error: refusing git loader at %s: ordinary file blocks include snippet (rename/remove, then rerun).\n' "${HOME}/.gitconfig" >&2
+    exit 1
   fi
 
-  target_dir="$(dirname "${target_path}")"
-  mkdir -p "${target_dir}"
-  temp_path="$(mktemp "${target_dir}/.ghostconsole-git.XXXXXX")"
+  if [[ -e "${HOME}/.gitconfig" || -L "${HOME}/.gitconfig" ]]; then
+    return 0
+  fi
 
-  cat > "${temp_path}" <<EOF
-[include]
-    path = ${source_path}
-EOF
-  mv -f "${temp_path}" "${target_path}"
+  mkdir -p "$(dirname "${HOME}/.gitconfig")"
+  printf '[include]\n    path = %s/.config/git/config\n' "${GHOSTCONSOLE_ROOT}" > "${HOME}/.gitconfig"
 }
 
-repo_root() {
-  cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd
+apply_ghostty_config() {
+  prepare_link_target ".config/ghostty"
+  ensure_symlink ".config/ghostty"
 }
 
-ensure_managed_paths() {
-  mkdir -p "${HOME}/.config" "${HOME}/.ghostconsole-backups"
+apply_git_config() {
+  prepare_link_target ".config/git"
+  ensure_symlink ".config/git"
+  prepare_loader_target ".gitconfig" "$(printf '[include]\n    path = %s/.config/git/config' "${GHOSTCONSOLE_ROOT}")"
+  write_git_loader
 }
 
-link_repo_config() {
-  local root
-  local backup_root
-
-  root="$(repo_root)"
-  backup_root="${HOME}/.ghostconsole-backups"
-
-  prepare_link_target "${HOME}/.config/ghostty" "${root}/.config/ghostty" "${backup_root}"
-  prepare_link_target "${HOME}/.config/zsh" "${root}/.config/zsh" "${backup_root}"
-  prepare_link_target "${HOME}/.config/git" "${root}/.config/git" "${backup_root}"
-
-  ensure_symlink "${root}/.config/ghostty" "${HOME}/.config/ghostty"
-  ensure_symlink "${root}/.config/zsh" "${HOME}/.config/zsh"
-  ensure_symlink "${root}/.config/git" "${HOME}/.config/git"
+apply_zsh_config() {
+  prepare_link_target ".config/zsh"
+  ensure_symlink ".config/zsh"
+  prepare_loader_target ".zshrc" "$(printf 'source "%s/.config/zsh/.zshrc"' "${GHOSTCONSOLE_ROOT}")"
+  write_zsh_loader
 }
 
-write_home_entrypoints() {
-  local root
-  local backup_root
-  local zsh_loader
-  local git_loader
+apply_repo_config() {
+  mkdir -p "${HOME}/.config" "${GHOSTCONSOLE_BACKUP_ROOT}"
 
-  root="$(repo_root)"
-  backup_root="${HOME}/.ghostconsole-backups"
-  zsh_loader="source \"${root}/.config/zsh/.zshrc\""
-  git_loader=$'[include]\n    path = '"${root}"'/.config/git/config'
-
-  if [[ -L "${HOME}/.zshrc" ]]; then
-    backup_existing_target "${HOME}/.zshrc" "${backup_root}"
-  elif [[ -e "${HOME}/.zshrc" ]] && [[ "$(< "${HOME}/.zshrc")" != "${zsh_loader}" ]]; then
-    backup_existing_target "${HOME}/.zshrc" "${backup_root}"
-  fi
-
-  if [[ -L "${HOME}/.gitconfig" ]]; then
-    backup_existing_target "${HOME}/.gitconfig" "${backup_root}"
-  elif [[ -e "${HOME}/.gitconfig" ]] && [[ "$(< "${HOME}/.gitconfig")" != "${git_loader}" ]]; then
-    backup_existing_target "${HOME}/.gitconfig" "${backup_root}"
-  fi
-
-  if [[ ! -e "${HOME}/.zshrc" && ! -L "${HOME}/.zshrc" ]]; then
-    write_zsh_loader "${HOME}/.zshrc" "${root}/.config/zsh/.zshrc"
-  fi
-
-  if [[ ! -e "${HOME}/.gitconfig" && ! -L "${HOME}/.gitconfig" ]]; then
-    write_git_loader "${HOME}/.gitconfig" "${root}/.config/git/config"
-  fi
+  apply_ghostty_config
+  apply_git_config
+  apply_zsh_config
 }
 
 verify_installation() {
-  command -v ghostty >/dev/null 2>&1 || die "ghostty not found after install"
-  command -v zsh >/dev/null 2>&1 || die "zsh not found after install"
-  command -v git >/dev/null 2>&1 || die "git not found after install"
+  if ! command -v ghostty >/dev/null 2>&1; then
+    printf '[GhostConsole-Installer] error: ghostty not found after install (not on PATH — check install output or try a new shell).\n' >&2
+    exit 1
+  fi
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '[GhostConsole-Installer] error: zsh not found after install (not on PATH — check install output or try a new shell).\n' >&2
+    exit 1
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    printf '[GhostConsole-Installer] error: git not found after install (not on PATH — check install output or try a new shell).\n' >&2
+    exit 1
+  fi
 }
 
 verify_links() {
-  local root
   local zsh_loader
   local git_loader
 
-  root="$(repo_root)"
-  zsh_loader="source \"${root}/.config/zsh/.zshrc\""
-  git_loader=$'[include]\n    path = '"${root}"'/.config/git/config'
+  zsh_loader="$(printf 'source "%s/.config/zsh/.zshrc"' "${GHOSTCONSOLE_ROOT}")"
+  git_loader="$(printf '[include]\n    path = %s/.config/git/config' "${GHOSTCONSOLE_ROOT}")"
 
-  [[ -L "${HOME}/.config/ghostty" ]] && [[ "$(readlink "${HOME}/.config/ghostty")" == "${root}/.config/ghostty" ]] || die "ghostty config link is incorrect"
-  [[ -L "${HOME}/.config/zsh" ]] && [[ "$(readlink "${HOME}/.config/zsh")" == "${root}/.config/zsh" ]] || die "zsh config link is incorrect"
-  [[ -L "${HOME}/.config/git" ]] && [[ "$(readlink "${HOME}/.config/git")" == "${root}/.config/git" ]] || die "git config link is incorrect"
-  [[ -f "${HOME}/.zshrc" ]] && [[ "$(< "${HOME}/.zshrc")" == "${zsh_loader}" ]] || die "~/.zshrc loader is incorrect"
-  [[ -f "${HOME}/.gitconfig" ]] && [[ "$(< "${HOME}/.gitconfig")" == "${git_loader}" ]] || die "~/.gitconfig loader is incorrect"
+  if [[ ! -L "${HOME}/.config/ghostty" ]] || [[ "$(readlink "${HOME}/.config/ghostty")" != "${GHOSTCONSOLE_ROOT}/.config/ghostty" ]]; then
+    printf '[GhostConsole-Installer] error: ghostty config link incorrect (want symlink %s -> %s).\n' "${HOME}/.config/ghostty" "${GHOSTCONSOLE_ROOT}/.config/ghostty" >&2
+    exit 1
+  fi
+  if [[ ! -L "${HOME}/.config/zsh" ]] || [[ "$(readlink "${HOME}/.config/zsh")" != "${GHOSTCONSOLE_ROOT}/.config/zsh" ]]; then
+    printf '[GhostConsole-Installer] error: zsh config link incorrect (want symlink %s -> %s).\n' "${HOME}/.config/zsh" "${GHOSTCONSOLE_ROOT}/.config/zsh" >&2
+    exit 1
+  fi
+  if [[ ! -L "${HOME}/.config/git" ]] || [[ "$(readlink "${HOME}/.config/git")" != "${GHOSTCONSOLE_ROOT}/.config/git" ]]; then
+    printf '[GhostConsole-Installer] error: git config link incorrect (want symlink %s -> %s).\n' "${HOME}/.config/git" "${GHOSTCONSOLE_ROOT}/.config/git" >&2
+    exit 1
+  fi
+  if [[ ! -f "${HOME}/.zshrc" ]] || [[ "$(< "${HOME}/.zshrc")" != "${zsh_loader}" ]]; then
+    printf '[GhostConsole-Installer] error: ~/.zshrc loader is incorrect — must exactly source \"%s/.config/zsh/.zshrc\".\n' "${GHOSTCONSOLE_ROOT}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${HOME}/.gitconfig" ]] || [[ "$(< "${HOME}/.gitconfig")" != "${git_loader}" ]]; then
+    printf '[GhostConsole-Installer] error: ~/.gitconfig loader is incorrect — must include path %s/.config/git/config like bootstrap writes.\n' "${GHOSTCONSOLE_ROOT}" >&2
+    exit 1
+  fi
 }
 
 print_summary() {
-  cat <<EOF
-[ghostconsole] bootstrap complete
-[ghostconsole] installed: ghostty, zsh, git
-[ghostconsole] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig
-EOF
+  printf '[GhostConsole-Installer] bootstrap complete\n'
+  printf '[GhostConsole-Installer] installed: ghostty, zsh, git\n'
+  printf '[GhostConsole-Installer] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig\n'
 }
 
 main() {
   install_packages
-  ensure_managed_paths
-  link_repo_config
-  write_home_entrypoints
+  apply_repo_config
   verify_installation
   verify_links
   print_summary
