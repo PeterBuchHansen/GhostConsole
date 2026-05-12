@@ -1,2 +1,3 @@
 font-size = 14
-theme = dark:OneHalfDark,light:OneHalfLight
+theme = dark:One Half Dark,light:One Half Light
+command = /usr/bin/zsh
