@@ -1,7 +1,22 @@
 #!/usr/bin/env bash
-set -euo pipefail
 
-GHOSTCONSOLE_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -n "${BASH_VERSION-}" ]]; then
+  GHOSTCONSOLE_BOOTSTRAP_INVOCATION="${BASH_SOURCE[0]}"
+  if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    GHOSTCONSOLE_BOOTSTRAP_EXECUTED=1
+    set -euo pipefail
+  else
+    GHOSTCONSOLE_BOOTSTRAP_EXECUTED=0
+  fi
+elif [[ -n "${ZSH_VERSION-}" ]]; then
+  GHOSTCONSOLE_BOOTSTRAP_INVOCATION="${(%):-%x}"
+  GHOSTCONSOLE_BOOTSTRAP_EXECUTED=0
+else
+  printf '%s\n' "GhostConsole bootstrap supports bash execution and bash/zsh sourcing only." >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+GHOSTCONSOLE_ROOT="$(cd -- "$(dirname -- "${GHOSTCONSOLE_BOOTSTRAP_INVOCATION}")" && pwd)"
 GHOSTCONSOLE_BACKUP_ROOT="${HOME}/.ghostconsole-backups"
 
 use_color() {
@@ -90,7 +105,7 @@ macos_install() {
 
   log_info "Installing packages on macOS (Ghostty first)..."
   run_install_command 'brew install --cask ghostty'
-  run_install_command 'brew install zsh git'
+  run_install_command 'brew install zsh git ncdu btop lazygit lazydocker'
 }
 
 linux_ubuntu_install() {
@@ -124,7 +139,148 @@ rm -f "${deb_file}"'; then
       fi
     fi
   fi
-  run_install_command 'sudo apt-get install -y zsh git'
+  run_install_command 'sudo apt-get install -y zsh git ncdu btop'
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
+  install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker
+}
+
+macos_tui_tools_install() {
+  if ! command -v brew >/dev/null 2>&1; then
+    log_error "Homebrew not in PATH on macOS — install from https://brew.sh then rerun bootstrap."
+    exit 1
+  fi
+
+  log_info "Installing TUI tools on macOS..."
+  run_install_command 'brew install ncdu btop lazygit lazydocker'
+}
+
+linux_ubuntu_tui_tools_install() {
+  log_info "Installing TUI tools on Ubuntu..."
+  run_install_command 'sudo apt-get install -y ncdu btop'
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
+  install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker
+}
+
+macos_tui_tools_update() {
+  if ! command -v brew >/dev/null 2>&1; then
+    log_error "Homebrew not in PATH on macOS — install from https://brew.sh then rerun bootstrap."
+    exit 1
+  fi
+
+  log_info "Updating TUI tools on macOS..."
+  run_install_command 'brew update && brew upgrade ncdu btop lazygit lazydocker || brew install ncdu btop lazygit lazydocker'
+}
+
+linux_ubuntu_tui_tools_update() {
+  log_info "Updating TUI tools on Ubuntu..."
+  run_install_command 'sudo apt-get update && sudo apt-get install -y ncdu btop'
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit force
+  install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker force
+}
+
+install_tui_tools() {
+  local kernel="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
+  case "${kernel}" in
+    darwin)
+      macos_tui_tools_install
+      ;;
+    linux)
+      local distro_id; [[ ! -r /etc/os-release ]] || distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+
+      case "${distro_id}" in
+        ubuntu)
+          linux_ubuntu_tui_tools_install
+          ;;
+        *)
+          log_error "TUI tool install supports only Ubuntu for Linux right now (detected id: '${distro_id:-unknown}')."
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      log_error "unsupported kernel '${kernel}' for TUI tool install."
+      exit 1
+      ;;
+  esac
+}
+
+update_tui_tools() {
+  local kernel="$(uname -s | tr '[:upper:]' '[:lower:]')"
+
+  case "${kernel}" in
+    darwin)
+      macos_tui_tools_update
+      ;;
+    linux)
+      local distro_id; [[ ! -r /etc/os-release ]] || distro_id="$(. /etc/os-release && printf '%s' "${ID:-}")"
+
+      case "${distro_id}" in
+        ubuntu)
+          linux_ubuntu_tui_tools_update
+          ;;
+        *)
+          log_error "TUI tool update supports only Ubuntu for Linux right now (detected id: '${distro_id:-unknown}')."
+          exit 1
+          ;;
+      esac
+      ;;
+    *)
+      log_error "unsupported kernel '${kernel}' for TUI tool update."
+      exit 1
+      ;;
+  esac
+}
+
+install_ubuntu_github_release_tool() {
+  local binary_name="$1"
+  local github_repo="$2"
+  local mode="${3-}"
+
+  if [[ "${mode}" != "force" ]] && command -v "${binary_name}" >/dev/null 2>&1; then
+    log_info "${binary_name} already installed; skipping."
+    return 0
+  fi
+
+  log_info "Installing ${binary_name} from GitHub releases..."
+  run_install_command "set -euo pipefail
+arch=\"\$(dpkg --print-architecture)\"
+case \"\${arch}\" in
+  amd64) arch=\"x86_64\" ;;
+  arm64) arch=\"arm64\" ;;
+  *) printf \"Unsupported architecture for ${binary_name}: %s\\n\" \"\${arch}\" >&2; exit 1 ;;
+esac
+workdir=\"\$(mktemp -d)\"
+trap 'rm -rf \"\${workdir}\"' EXIT
+cd \"\${workdir}\"
+latest_url=\"\$(curl -fsSLI -o /dev/null -w \"%{url_effective}\" https://github.com/${github_repo}/releases/latest)\"
+tag=\"\${latest_url##*/}\"
+version=\"\${tag#v}\"
+archive=\"${binary_name}_\${version}_Linux_\${arch}.tar.gz\"
+curl -fL -o \"\${archive}\" \"https://github.com/${github_repo}/releases/download/\${tag}/\${archive}\"
+tar -xzf \"\${archive}\" ${binary_name}
+sudo install -m 0755 ${binary_name} /usr/local/bin/${binary_name}"
+}
+
+install_cursor_cli() {
+  if command -v agent >/dev/null 2>&1; then
+    log_info "Updating Cursor CLI..."
+    run_install_command 'agent update'
+    return 0
+  fi
+
+  log_info "Installing Cursor CLI..."
+  run_install_command 'curl https://cursor.com/install -fsS | bash'
+}
+
+uninstall_cursor_cli() {
+  if [[ ! -e "${HOME}/.local/bin/agent" ]]; then
+    log_info "Cursor CLI not found at ${HOME}/.local/bin/agent; skipping."
+    return 0
+  fi
+
+  rm -f -- "${HOME}/.local/bin/agent"
+  log_success "removed Cursor CLI at ${HOME}/.local/bin/agent"
 }
 
 run_install_command() {
@@ -156,6 +312,26 @@ install_powerlevel10k() {
 
   log_info "Installing Powerlevel10k..."
   run_install_command "git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${plugin_path}"
+}
+
+install_zsh_autosuggestions() {
+  local plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/zsh-autosuggestions"
+
+  mkdir -p "$(dirname "${plugin_path}")"
+
+  if [[ -d "${plugin_path}/.git" ]]; then
+    log_info "Updating zsh-autosuggestions..."
+    run_install_command "git -C ${plugin_path} pull --ff-only"
+    return 0
+  fi
+
+  if [[ -e "${plugin_path}" ]]; then
+    log_error "refusing zsh-autosuggestions install at ${plugin_path}: path exists but is not a git checkout."
+    exit 1
+  fi
+
+  log_info "Installing zsh-autosuggestions..."
+  run_install_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git ${plugin_path}"
 }
 
 backup_existing_target() {
@@ -234,6 +410,33 @@ remove_managed_loader() {
   fi
 }
 
+remove_managed_bash_welcome_block() {
+  local bashrc_path="${HOME}/.bashrc"
+  local temp_path
+
+  [[ -f "${bashrc_path}" ]] || return 0
+  temp_path="$(mktemp)"
+  awk '
+    $0 == "# >>> GhostConsole welcome ghost >>>" { skip = 1; next }
+    $0 == "# <<< GhostConsole welcome ghost <<<" { skip = 0; next }
+    !skip { print }
+  ' "${bashrc_path}" > "${temp_path}"
+  mv "${temp_path}" "${bashrc_path}"
+}
+
+write_bash_welcome_loader() {
+  mkdir -p "$(dirname "${HOME}/.bashrc")"
+  [[ -f "${HOME}/.bashrc" ]] || : > "${HOME}/.bashrc"
+  remove_managed_bash_welcome_block
+  {
+    printf '# >>> GhostConsole welcome ghost >>>\n'
+    printf 'if [[ -r "${HOME}/.config/shell/welcome-ghost.sh" ]]; then\n'
+    printf '  source "${HOME}/.config/shell/welcome-ghost.sh"\n'
+    printf 'fi\n'
+    printf '# <<< GhostConsole welcome ghost <<<\n'
+  } >> "${HOME}/.bashrc"
+}
+
 write_zsh_loader() {
   if [[ -L "${HOME}/.zshrc" && -d "${HOME}/.zshrc" ]]; then
     log_error "refusing zsh loader at ${HOME}/.zshrc: symlink points at a directory (fix or remove, then rerun)."
@@ -277,6 +480,12 @@ apply_ghostty_config() {
   ensure_symlink ".config/ghostty"
 }
 
+apply_shell_config() {
+  prepare_link_target ".config/shell"
+  ensure_symlink ".config/shell"
+  write_bash_welcome_loader
+}
+
 apply_git_config() {
   prepare_link_target ".config/git"
   ensure_symlink ".config/git"
@@ -295,16 +504,19 @@ apply_repo_config() {
   mkdir -p "${HOME}/.config" "${GHOSTCONSOLE_BACKUP_ROOT}"
 
   apply_ghostty_config
+  apply_shell_config
   apply_git_config
   apply_zsh_config
 }
 
 uninstall_config() {
   remove_managed_symlink ".config/ghostty"
+  remove_managed_symlink ".config/shell"
   remove_managed_symlink ".config/git"
   remove_managed_symlink ".config/zsh"
   remove_managed_loader ".gitconfig" "$(printf '[include]\n    path = %s/.config/git/config' "${GHOSTCONSOLE_ROOT}")"
   remove_managed_loader ".zshrc" "$(printf 'source "%s/.config/zsh/.zshrc"' "${GHOSTCONSOLE_ROOT}")"
+  remove_managed_bash_welcome_block
   log_success "uninstalled GhostConsole links and loaders; backups left in ${GHOSTCONSOLE_BACKUP_ROOT}"
 }
 
@@ -359,27 +571,223 @@ verify_links() {
 
 print_summary() {
   log_success "bootstrap complete"
-  log_success "installed: ghostty, zsh, git"
-  log_success "linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig"
+  log_success "installed: ghostty, zsh, git, ncdu, btop, lazygit, lazydocker, Powerlevel10k, zsh-autosuggestions"
+  log_success "linked: ~/.config/ghostty ~/.config/zsh ~/.config/shell ~/.config/git ~/.zshrc ~/.gitconfig"
 }
 
-main() {
-  if [[ "${1-}" == "--uninstall" ]]; then
-    uninstall_config
-    if [[ "${2-}" == "--packages" ]]; then
-      uninstall_packages
-    fi
-    return 0
-  fi
-
+run_full_install() {
   install_packages
   install_powerlevel10k
+  install_zsh_autosuggestions
   apply_repo_config
   verify_installation
   verify_links
   print_summary
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+play_welcome_ghost() {
+  local welcome_script="${GHOSTCONSOLE_ROOT}/.config/shell/welcome-ghost.sh"
+
+  if [[ ! -r "${welcome_script}" ]]; then
+    log_error "welcome ghost script not found at ${welcome_script}."
+    return 1
+  fi
+
+  GHOSTCONSOLE_WELCOME_GHOST_AUTO=0 source "${welcome_script}"
+  if ! command -v ghostconsole_play >/dev/null 2>&1; then
+    log_error "welcome ghost playback function was not loaded."
+    return 1
+  fi
+
+  if ! ghostconsole_play 2>/dev/null; then
+    log_error "welcome ghost playback failed."
+    return 1
+  fi
+}
+
+print_completion() {
+  printf '%s\n' \
+    '#compdef bootstrap.sh' \
+    '' \
+    '_bootstrap_sh() {' \
+    '  local -a first_flags uninstall_flags' \
+    '  first_flags=(' \
+    '    "--install:install Ghostty, zsh, git, TUI tools, zsh plugins, and managed config"' \
+    '    "--update-tui-tools:update ncdu, btop, lazygit, and lazydocker only"' \
+    '    "--play-welcome-ghost:play the welcome ghost immediately"' \
+    '    "--cursor-cli:install or update Cursor CLI only"' \
+    '    "--uninstall:remove GhostConsole-managed items"' \
+    '    "-h:show help"' \
+    '    "--help:show help"' \
+    '  )' \
+    '  uninstall_flags=(' \
+    '    "--packages:also uninstall Ghostty package"' \
+    '    "--cursor-cli:remove Cursor CLI only"' \
+    '  )' \
+    '' \
+    '  if (( CURRENT == 2 )); then' \
+    '    _describe "bootstrap options" first_flags' \
+    '    return' \
+    '  fi' \
+    '' \
+    '  if [[ "${words[2]}" == "--uninstall" ]]; then' \
+    '    _describe "uninstall options" uninstall_flags' \
+    '  fi' \
+    '}' \
+    '' \
+    '_bootstrap_sh "$@"'
+}
+
+print_completion_source() {
+  printf '%s\n' \
+    'if [ -n "${BASH_VERSION-}" ]; then' \
+    '  _ghostconsole_bootstrap_complete() {' \
+    '    local cur prev opts uninstall_opts' \
+    '    cur="${COMP_WORDS[COMP_CWORD]}"' \
+    '    prev="${COMP_WORDS[COMP_CWORD-1]}"' \
+    '    opts="--install -h --help --update-tui-tools --play-welcome-ghost --cursor-cli --uninstall"' \
+    '    uninstall_opts="--packages --cursor-cli"' \
+    '    if [ "${prev}" = "--uninstall" ]; then' \
+    '      COMPREPLY=( $(compgen -W "${uninstall_opts}" -- "${cur}") )' \
+    '    else' \
+    '      COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )' \
+    '    fi' \
+    '  }'
+  printf '  complete -F _ghostconsole_bootstrap_complete ./bootstrap.sh bootstrap.sh %q\n' "${GHOSTCONSOLE_BOOTSTRAP_INVOCATION}"
+  printf '%s\n' \
+    'elif [ -n "${ZSH_VERSION-}" ]; then'
+  printf '  fpath=("%s/.config/shell/completions" ${fpath})\n' "${GHOSTCONSOLE_ROOT}"
+  printf '%s\n' \
+    '  autoload -Uz compinit' \
+    '  compinit'
+  printf '  compdef _bootstrap_sh %q 2>/dev/null || true\n' "${GHOSTCONSOLE_BOOTSTRAP_INVOCATION}"
+  printf '%s\n' \
+    'else' \
+    '  printf "%s\n" "GhostConsole completion supports bash and zsh only." >&2' \
+    'fi'
+}
+
+install_bootstrap_completion() {
+  local completion_path="${GHOSTCONSOLE_ROOT}/.config/shell/completions/_bootstrap.sh"
+
+  mkdir -p "$(dirname "${completion_path}")"
+  print_completion > "${completion_path}"
+  log_success "installed bootstrap completion"
+}
+
+activate_bootstrap_completion() {
+  install_bootstrap_completion
+  eval "$(print_completion_source)"
+}
+
+bootstrap_prefill_line() {
+  printf '%s --\n' "${GHOSTCONSOLE_BOOTSTRAP_INVOCATION}"
+}
+
+queue_bootstrap_prefill() {
+  local prefill_line
+
+  prefill_line="$(bootstrap_prefill_line)"
+
+  if [[ -n "${ZSH_VERSION-}" ]] && command -v print >/dev/null 2>&1; then
+    print -z -- "${prefill_line}"
+    return 0
+  fi
+
+  if [[ -n "${BASH_VERSION-}" && -t 0 && -t 1 ]]; then
+    __ghostconsole_bootstrap_prefill_line="${prefill_line}"
+    __ghostconsole_prefill_bootstrap_line() {
+      READLINE_LINE="${__ghostconsole_bootstrap_prefill_line}"
+      READLINE_POINT="${#__ghostconsole_bootstrap_prefill_line}"
+      unset __ghostconsole_bootstrap_prefill_line
+      bind -r '"\e[0n"' 2>/dev/null || true
+      unset -f __ghostconsole_prefill_bootstrap_line
+    }
+    bind -x '"\e[0n": __ghostconsole_prefill_bootstrap_line' 2>/dev/null || return 0
+    printf '\033[5n' > /dev/tty 2>/dev/null || true
+  fi
+}
+
+print_help() {
+  printf '%s\n' \
+    'Usage: ./bootstrap.sh [option]' \
+    '' \
+    'Options:' \
+    '  -h, --help                Show this help message.' \
+    '  --install                 Install Ghostty, zsh, git, TUI tools, zsh plugins, and managed config.' \
+    '  --update-tui-tools        Update ncdu, btop, lazygit, and lazydocker only.' \
+    '  --play-welcome-ghost      Play the welcome ghost immediately.' \
+    '  --cursor-cli              Install Cursor CLI only.' \
+    '  --uninstall               Remove GhostConsole-managed links and loaders.' \
+    '  --uninstall --cursor-cli  Remove Cursor CLI only.' \
+    '  --uninstall --packages    Remove managed links/loaders and uninstall Ghostty.'
+}
+
+print_source_instruction() {
+  local command='source ./bootstrap.sh'
+  local comment='# To get tab completion for Usage.'
+
+  if use_color 1; then
+    printf '\033[36m%s\033[0m %s\n\n' "${command}" "${comment}"
+    return 0
+  fi
+
+  printf '%s %s\n\n' "${command}" "${comment}"
+}
+
+main() {
+  if [[ -z "${1-}" || "${1-}" == "-h" || "${1-}" == "--help" ]]; then
+    print_source_instruction
+    print_help
+    return 0
+  fi
+
+  if [[ "${1-}" == "--install" ]]; then
+    run_full_install
+    return 0
+  fi
+
+  if [[ "${1-}" == "--update-tui-tools" ]]; then
+    update_tui_tools
+    return 0
+  fi
+
+  if [[ "${1-}" == "--play-welcome-ghost" ]]; then
+    play_welcome_ghost
+    return $?
+  fi
+
+  if [[ "${1-}" == "--cursor-cli" ]]; then
+    install_cursor_cli
+    return 0
+  fi
+
+  if [[ "${1-}" == "--uninstall" ]]; then
+    case "${2-}" in
+      --cursor-cli)
+        uninstall_cursor_cli
+        ;;
+      --packages)
+        uninstall_config
+        uninstall_packages
+        ;;
+      *)
+        uninstall_config
+        ;;
+    esac
+    return 0
+  fi
+
+  if [[ -n "${1-}" ]]; then
+    log_error "unrecognized option: ${1}"
+    print_help >&2
+    return 1
+  fi
+}
+
+if [[ "${GHOSTCONSOLE_BOOTSTRAP_EXECUTED}" == 1 ]]; then
   main "$@"
+elif [[ $- == *i* ]]; then
+  activate_bootstrap_completion
+  queue_bootstrap_prefill
 fi

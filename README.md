@@ -29,7 +29,7 @@ The first milestone flow is:
 - detect whether you are on macOS or **Ubuntu** Linux
 - install `Ghostty` first, then `zsh` and `git`
 - create managed config and backup directories in your home folder
-- link the repo-owned config in `.config/ghostty`, `.config/zsh`, and `.config/git`
+- link the repo-owned config in `.config/ghostty`, `.config/zsh`, `.config/shell`, and `.config/git`
 - write thin home entrypoints at `~/.zshrc` and `~/.gitconfig`
 - verify the installed tools and linked config paths before printing a summary
 
@@ -48,6 +48,7 @@ Confirm these paths now point at this repo:
 \`\`\`bash
 readlink ~/.config/ghostty
 readlink ~/.config/zsh
+readlink ~/.config/shell
 readlink ~/.config/git
 \`\`\`
 
@@ -80,21 +81,10 @@ Later milestones may add more CLI tools and optional packages.
 Versioned config files for:
 - **Ghostty** (terminal)
 - **zsh** (shell)
+- shared shell startup scripts and completions
 - **git**
 
 All configs are symlinked into place.
-
----
-
-### 🧰 CLI tools (early stage)
-A small set of personal scripts in:
-
-\`\`\`
-bin/
-\`\`\`
-
-These are simple utilities to support daily workflows.  
-This area will grow over time.
 
 ---
 
@@ -103,10 +93,10 @@ This area will grow over time.
 \`\`\`
 .
 ├── bootstrap.sh
-├── bin/
 ├── .config/
 │   ├── ghostty/
 │   ├── zsh/
+│   ├── shell/
 │   └── git/
 ├── docs/
 │   └── superpowers/

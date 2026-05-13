@@ -23,7 +23,6 @@ The repository should contain the following top-level structure:
 ```text
 .
 ├── bootstrap.sh
-├── bin/
 ├── .config/
 │   ├── ghostty/
 │   ├── zsh/
@@ -44,9 +43,6 @@ The repository should contain the following top-level structure:
 
 - `.config/git/`
   Stores the repo-managed git configuration that should be layered into the user's git setup.
-
-- `bin/`
-  Exists now as a placeholder for future scripts so the repo shape matches the project direction without inventing utilities early.
 
 ## Bootstrap Behavior
 `bootstrap.sh` should run as a linear, idempotent setup script with visible logging.
@@ -189,6 +185,5 @@ These items are intentionally left for implementation planning, not for revisiti
 
 - the exact Linux repository fallback steps for `Ghostty`
 - the exact file names inside `.config/zsh/`, `.config/git/`, and `.config/ghostty/`
-- whether `bin/` uses `.gitkeep` or a first helper script
 
 Those are implementation details within the approved design, not unresolved product questions.

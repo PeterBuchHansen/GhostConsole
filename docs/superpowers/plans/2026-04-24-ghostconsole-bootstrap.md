@@ -18,7 +18,6 @@ Create or modify these files during implementation:
 - Create: `.config/ghostty/config`
 - Create: `.config/zsh/.zshrc`
 - Create: `.config/git/config`
-- Create: `bin/.gitkeep`
 - Modify: `README.md`
 
 Each file should keep one clear responsibility:
@@ -196,7 +195,6 @@ git commit -m "test: add bootstrap shell test harness"
 - Create: `.config/ghostty/config`
 - Create: `.config/zsh/.zshrc`
 - Create: `.config/git/config`
-- Create: `bin/.gitkeep`
 - Test: `tests/bootstrap_test.sh`
 
 - [ ] **Step 1: Write failing tests for backup, symlink creation, and generated home entrypoints**
@@ -364,7 +362,7 @@ theme = dark:OneHalfDark,light:OneHalfLight
 ```bash
 # .config/zsh/.zshrc
 export GHOSTCONSOLE_HOME="${HOME}/.config/zsh"
-export PATH="${HOME}/bin:${PATH}"
+export PATH="${HOME}/.local/bin:${PATH}"
 
 autoload -Uz compinit
 compinit
@@ -388,7 +386,7 @@ Expected: `PASS: 8 tests`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add bootstrap.sh tests/bootstrap_test.sh .config/ghostty/config .config/zsh/.zshrc .config/git/config bin/.gitkeep
+git add bootstrap.sh tests/bootstrap_test.sh .config/ghostty/config .config/zsh/.zshrc .config/git/config
 git commit -m "feat: add managed config linking helpers"
 ```
 
@@ -656,7 +654,7 @@ print_summary() {
   cat <<EOF
 [ghostconsole] bootstrap complete
 [ghostconsole] installed: ghostty, zsh, git
-[ghostconsole] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig
+[ghostconsole] linked: ~/.config/ghostty ~/.config/zsh ~/.config/shell ~/.config/git ~/.zshrc ~/.gitconfig
 EOF
 }
 
@@ -737,6 +735,6 @@ Expected:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add bootstrap.sh tests/bootstrap_test.sh README.md .config/ghostty/config .config/zsh/.zshrc .config/git/config bin/.gitkeep
+git add bootstrap.sh tests/bootstrap_test.sh README.md .config/ghostty/config .config/zsh/.zshrc .config/git/config
 git commit -m "feat: bootstrap ghostconsole core setup"
 ```

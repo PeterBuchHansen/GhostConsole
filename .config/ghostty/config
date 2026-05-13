@@ -1,3 +1,6 @@
-font-size = 14
+Aafont-size = 14
+window-width = 999
+window-height = 999
 theme = dark:One Half Dark,light:One Half Light
+background-opacity = 1.0
 command = /usr/bin/zsh
