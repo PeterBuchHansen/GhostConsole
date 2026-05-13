@@ -101,7 +101,7 @@ test_macos_install_invokes_ghostty_first() {
 
   [[ "${#calls[@]}" == 2 ]] || fail "macos_install should run two install commands"
   assert_eq 'brew install --cask ghostty' "${calls[0]}" "macos_install should install Ghostty first"
-  assert_eq 'brew install zsh git' "${calls[1]}" "macos_install should install zsh and git after Ghostty"
+  assert_eq 'brew install zsh git ncdu btop lazygit lazydocker' "${calls[1]}" "macos_install should install zsh, git, and TUI tools after Ghostty"
   pass
 }
 
@@ -116,12 +116,19 @@ test_linux_ubuntu_install_uses_ghostty_ubuntu_install_script() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
       return 1
     fi
+    if [[ "$1" == "-v" && ( "$2" == "lazygit" || "$2" == "lazydocker" ) ]]; then
+      return 1
+    fi
     builtin command "$@"
   }
 
   linux_ubuntu_install
 
-  assert_eq $'/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh)"\nsudo apt-get install -y zsh git' "$(printf '%s\n' "${calls[@]}")" "ubuntu flow should install Ghostty from the documented ghostty-ubuntu script before zsh and git"
+  assert_eq 4 "${#calls[@]}" "ubuntu flow should install Ghostty, apt packages, lazygit, and lazydocker"
+  assert_eq '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh)"' "${calls[0]}" "ubuntu flow should install Ghostty from the documented ghostty-ubuntu script first"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[1]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty"
+  assert_contains "jesseduffield/lazygit" "${calls[2]}" "ubuntu flow should install lazygit from GitHub releases"
+  assert_contains "jesseduffield/lazydocker" "${calls[3]}" "ubuntu flow should install lazydocker from GitHub releases"
   pass
 }
 
@@ -136,12 +143,18 @@ test_linux_ubuntu_install_skips_ghostty_installer_when_present() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
       return 0
     fi
+    if [[ "$1" == "-v" && ( "$2" == "lazygit" || "$2" == "lazydocker" ) ]]; then
+      return 1
+    fi
     builtin command "$@"
   }
 
   linux_ubuntu_install
 
-  assert_eq 'sudo apt-get install -y zsh git' "$(printf '%s\n' "${calls[@]}")" "ubuntu flow should not rerun the upstream Ghostty installer when ghostty is already available"
+  assert_eq 3 "${#calls[@]}" "ubuntu flow should install apt packages, lazygit, and lazydocker when Ghostty is already installed"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[0]}" "ubuntu flow should not rerun the upstream Ghostty installer when ghostty is already available"
+  assert_contains "jesseduffield/lazygit" "${calls[1]}" "ubuntu flow should still install lazygit when Ghostty is already installed"
+  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "ubuntu flow should still install lazydocker when Ghostty is already installed"
   pass
 }
 
@@ -154,6 +167,9 @@ test_linux_ubuntu_install_reports_ghostty_installer_failure() {
 
   command() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
+      return 1
+    fi
+    if [[ "$1" == "-v" && ( "$2" == "lazygit" || "$2" == "lazydocker" ) ]]; then
       return 1
     fi
     builtin command "$@"
@@ -182,15 +198,206 @@ test_linux_ubuntu_install_falls_back_when_ghostty_installer_fails() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
       return 1
     fi
+    if [[ "$1" == "-v" && ( "$2" == "lazygit" || "$2" == "lazydocker" ) ]]; then
+      return 1
+    fi
     builtin command "$@"
   }
 
   linux_ubuntu_install
 
-  assert_eq 3 "${#calls[@]}" "ubuntu flow should try upstream installer, fallback installer, then zsh/git"
+  assert_eq 5 "${#calls[@]}" "ubuntu flow should try upstream installer, fallback installer, apt packages, lazygit, and lazydocker"
   assert_contains "raw.githubusercontent.com/mkasberg/ghostty-ubuntu" "${calls[0]}" "ubuntu flow should try the documented Ghostty installer first"
   assert_contains "github.com/mkasberg/ghostty-ubuntu/releases/latest" "${calls[1]}" "ubuntu fallback should avoid the GitHub API release lookup"
-  assert_eq 'sudo apt-get install -y zsh git' "${calls[2]}" "ubuntu flow should install zsh and git after Ghostty fallback"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[2]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty fallback"
+  assert_contains "jesseduffield/lazygit" "${calls[3]}" "ubuntu flow should install lazygit after Ghostty fallback"
+  assert_contains "jesseduffield/lazydocker" "${calls[4]}" "ubuntu flow should install lazydocker after Ghostty fallback"
+  pass
+}
+
+test_install_ubuntu_github_release_tool_installs_missing_binary() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "lazygit" ]]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
+
+  [[ "${#calls[@]}" == 1 ]] || fail "missing GitHub release tool should run one install command"
+  assert_contains "https://github.com/jesseduffield/lazygit/releases/latest" "${calls[0]}" "GitHub release tool install should resolve latest without the GitHub API"
+  assert_contains "lazygit_\${version}_Linux_\${arch}.tar.gz" "${calls[0]}" "GitHub release tool install should download the expected Linux archive"
+  assert_contains "sudo install -m 0755 lazygit /usr/local/bin/lazygit" "${calls[0]}" "GitHub release tool install should install binary into /usr/local/bin"
+  pass
+}
+
+test_install_ubuntu_github_release_tool_skips_existing_binary() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "lazygit" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
+
+  assert_eq 0 "${#calls[@]}" "existing GitHub release tool should not be reinstalled"
+  pass
+}
+
+test_install_ubuntu_github_release_tool_forces_existing_binary_when_requested() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "lazygit" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  install_ubuntu_github_release_tool lazygit jesseduffield/lazygit force
+
+  [[ "${#calls[@]}" == 1 ]] || fail "forced GitHub release tool install should run even when binary exists"
+  assert_contains "https://github.com/jesseduffield/lazygit/releases/latest" "${calls[0]}" "forced GitHub release tool install should resolve latest release"
+  pass
+}
+
+test_install_tui_tools_ubuntu_installs_only_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" ]]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+
+  uname() {
+    printf 'Linux\n'
+  }
+
+  install_tui_tools
+
+  assert_eq 3 "${#calls[@]}" "ubuntu TUI installer should run apt plus lazygit and lazydocker installs"
+  assert_eq 'sudo apt-get install -y ncdu btop' "${calls[0]}" "standalone Ubuntu TUI installer should not install ghostty, zsh, or git"
+  assert_contains "jesseduffield/lazygit" "${calls[1]}" "standalone Ubuntu TUI installer should install lazygit"
+  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "standalone Ubuntu TUI installer should install lazydocker"
+  pass
+}
+
+test_update_tui_tools_ubuntu_updates_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  uname() {
+    printf 'Linux\n'
+  }
+
+  update_tui_tools
+
+  assert_eq 3 "${#calls[@]}" "ubuntu TUI updater should update apt packages plus GitHub release tools"
+  assert_eq 'sudo apt-get update && sudo apt-get install -y ncdu btop' "${calls[0]}" "Ubuntu TUI updater should refresh apt metadata and update apt-packaged tools"
+  assert_contains "jesseduffield/lazygit" "${calls[1]}" "Ubuntu TUI updater should update lazygit from GitHub releases"
+  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "Ubuntu TUI updater should update lazydocker from GitHub releases"
+  pass
+}
+
+test_install_cursor_cli_runs_official_installer_when_missing() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "agent" ]]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+
+  install_cursor_cli
+
+  assert_eq 'curl https://cursor.com/install -fsS | bash' "$(printf '%s\n' "${calls[@]}")" "Cursor CLI installer should use the official install command"
+  pass
+}
+
+test_install_cursor_cli_updates_when_agent_exists() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "agent" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  install_cursor_cli
+
+  assert_eq 'agent update' "$(printf '%s\n' "${calls[@]}")" "Cursor CLI installer should update when agent is already available"
+  pass
+}
+
+test_uninstall_cursor_cli_removes_local_agent_only() {
+  local workdir
+
+  workdir="$(mktemp -d)"
+  HOME="${workdir}"
+  mkdir -p "${HOME}/.local/bin"
+  printf 'agent\n' > "${HOME}/.local/bin/agent"
+  chmod +x "${HOME}/.local/bin/agent"
+
+  uninstall_cursor_cli
+
+  [[ ! -e "${HOME}/.local/bin/agent" ]] || fail "Cursor CLI uninstall should remove ~/.local/bin/agent"
+  pass
+}
+
+test_uninstall_cursor_cli_skips_when_local_agent_missing() {
+  local workdir
+  local output
+
+  workdir="$(mktemp -d)"
+  HOME="${workdir}"
+
+  output="$(uninstall_cursor_cli)"
+
+  assert_contains "Cursor CLI not found at ${HOME}/.local/bin/agent; skipping." "${output}" "Cursor CLI uninstall should explain missing local agent"
   pass
 }
 
@@ -236,6 +443,48 @@ test_install_powerlevel10k_updates_existing_checkout() {
   pass
 }
 
+test_install_zsh_autosuggestions_clones_when_missing() {
+  local workdir
+  local plugin_path
+  local -a calls=()
+
+  workdir="$(mktemp -d)"
+  GHOSTCONSOLE_ROOT="${workdir}/repo"
+  plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/zsh-autosuggestions"
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_zsh_autosuggestions
+
+  [[ -d "$(dirname "${plugin_path}")" ]] || fail "zsh-autosuggestions parent directory should be created"
+  assert_eq "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git ${plugin_path}" "${calls[0]}" "zsh-autosuggestions should be cloned when missing"
+  GHOSTCONSOLE_ROOT="${REPO_ROOT}"
+  pass
+}
+
+test_install_zsh_autosuggestions_updates_existing_checkout() {
+  local workdir
+  local plugin_path
+  local -a calls=()
+
+  workdir="$(mktemp -d)"
+  GHOSTCONSOLE_ROOT="${workdir}/repo"
+  plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/zsh-autosuggestions"
+  mkdir -p "${plugin_path}/.git"
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_zsh_autosuggestions
+
+  assert_eq "git -C ${plugin_path} pull --ff-only" "${calls[0]}" "zsh-autosuggestions should update an existing checkout"
+  GHOSTCONSOLE_ROOT="${REPO_ROOT}"
+  pass
+}
+
 test_zsh_config_sources_powerlevel10k() {
   local config
 
@@ -255,6 +504,202 @@ test_zsh_config_sources_repo_powerlevel10k_config() {
   pass
 }
 
+test_zsh_config_sources_zsh_autosuggestions() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
+
+  assert_contains 'plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' "${config}" "zsh config should source zsh-autosuggestions"
+  pass
+}
+
+test_powerlevel10k_config_uses_repo_config() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.p10k.zsh")"
+
+  assert_contains "Generated by Powerlevel10k configuration wizard" "${config}" "Powerlevel10k config should be the generated repo config"
+  assert_contains "typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=' '" "${config}" "Powerlevel10k config should avoid a full-width prompt gap on resize"
+  pass
+}
+
+test_ghostty_config_sets_large_initial_window() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/ghostty/config")"
+
+  assert_contains 'window-width = 999' "${config}" "Ghostty config should use an oversized width because Linux startup maximize can be ignored"
+  assert_contains 'window-height = 999' "${config}" "Ghostty config should use an oversized height because Linux startup maximize can be ignored"
+  pass
+}
+
+test_zsh_config_adds_local_bin_for_cursor_cli() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
+
+  assert_contains 'export PATH="${HOME}/.local/bin:${PATH}"' "${config}" "zsh config should include ~/.local/bin for Cursor CLI"
+  assert_not_contains '${HOME}/bin' "${config}" "zsh config should not include unused ~/bin path"
+  pass
+}
+
+test_zsh_config_adds_repo_completions_to_fpath() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
+
+  assert_contains 'fpath=("${HOME}/.config/shell/completions" ${fpath})' "${config}" "zsh config should include shared shell completions in fpath"
+  assert_not_contains 'fpath=("${GHOSTCONSOLE_HOME}/completions" ${fpath})' "${config}" "zsh config should not use zsh-specific completion directory"
+  pass
+}
+
+test_zsh_config_sources_welcome_ghost() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
+
+  assert_contains 'source "${HOME}/.config/shell/welcome-ghost.sh"' "${config}" "zsh config should source shared welcome ghost"
+  pass
+}
+
+test_welcome_ghost_prints_only_in_interactive_ghostty_shell() {
+  local output
+  local page_path
+  local boot_id
+
+  page_path="$(mktemp)"
+  boot_id="print-boot-${RANDOM}-${RANDOM}"
+  rm -rf "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+  cat > "${page_path}" <<'EOF'
+home/animation_frames/frame_001\":[\"one <span class=\\\"b\\\">blue</span>\",\"@$$$$\"],\"home/animation_frames/frame_002\":[\"two\"]
+EOF
+
+  output="$(
+    TERM=xterm-ghostty \
+    COLUMNS=30 \
+    LINES=10 \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file://${page_path}" \
+    GHOSTCONSOLE_BOOT_ID="${boot_id}" \
+    bash --noprofile --norc -i -c 'source "$1"' _ "${REPO_ROOT}/.config/shell/welcome-ghost.sh" 2>/dev/null
+  )"
+
+  assert_contains '@$$$$' "${output}" "welcome ghost should print the Ghostty-style mascot in interactive Ghostty shell"
+  assert_contains 'blue' "${output}" "welcome ghost should strip homepage color spans from fetched frames"
+  assert_contains $'\033[0;34mblue\033[0;37m' "${output}" "welcome ghost should preserve homepage blue accent spans"
+  assert_contains 'two' "${output}" "welcome ghost should play all fetched frames"
+  assert_contains $'\033[?1049h' "${output}" "welcome ghost should use the alternate screen while animating"
+  assert_contains $'\033[?1049l' "${output}" "welcome ghost should leave the alternate screen after animating"
+  assert_eq 2 "$(grep -o $'\033\\[?2026h' <<< "${output}" | wc -l | tr -d ' ')" "welcome ghost should begin synchronized output for each frame"
+  assert_eq 2 "$(grep -o $'\033\\[?2026l' <<< "${output}" | wc -l | tr -d ' ')" "welcome ghost should end synchronized output for each frame"
+  assert_contains $'\033[5;12H\033[0;37mone' "${output}" "welcome ghost should center frames in the terminal grid"
+  assert_contains $'@$$$$\033[K' "${output}" "welcome ghost should erase stale cells at the end of each frame line"
+  rm -rf "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+  pass
+}
+
+test_welcome_ghost_runs_once_per_boot_marker() {
+  local first_output
+  local second_output
+  local page_path
+  local boot_id
+
+  page_path="$(mktemp)"
+  boot_id="same-boot-${RANDOM}-${RANDOM}"
+  printf 'home/animation_frames/frame_001\\":[\\"first-boot-frame\\"]' > "${page_path}"
+  rm -rf "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+
+  first_output="$(
+    TERM=xterm-ghostty \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file://${page_path}" \
+    GHOSTCONSOLE_BOOT_ID="${boot_id}" \
+    bash --noprofile --norc -i -c 'source "$1"' _ "${REPO_ROOT}/.config/shell/welcome-ghost.sh" 2>/dev/null
+  )"
+  second_output="$(
+    TERM=xterm-ghostty \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file://${page_path}" \
+    GHOSTCONSOLE_BOOT_ID="${boot_id}" \
+    bash --noprofile --norc -i -c 'source "$1"' _ "${REPO_ROOT}/.config/shell/welcome-ghost.sh" 2>/dev/null
+  )"
+
+  assert_contains 'first-boot-frame' "${first_output}" "welcome ghost should play on first terminal for boot id"
+  assert_eq "" "${second_output}" "welcome ghost should stay silent after boot marker exists"
+  [[ -f "/tmp/ghostconsole-welcome-ghost-${boot_id}" ]] || fail "welcome ghost should create its boot marker file under /tmp"
+  rm -rf "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+  pass
+}
+
+test_welcome_ghost_does_not_define_reset_alias() {
+  local page_path
+  local output
+
+  page_path="$(mktemp)"
+  printf 'home/animation_frames/frame_001\\":[\\"alias-check-frame\\"]' > "${page_path}"
+
+  output="$(
+    TERM=xterm-ghostty \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file://${page_path}" \
+    GHOSTCONSOLE_BOOT_ID="alias-boot-${RANDOM}-${RANDOM}" \
+    bash --noprofile --norc -i -c 'source "$1" >/dev/null 2>&1; alias reset-ghost-welcome >/dev/null 2>&1 && printf alias-present || printf alias-missing' _ "${REPO_ROOT}/.config/shell/welcome-ghost.sh" 2>/dev/null
+  )"
+
+  assert_eq "alias-missing" "${output}" "welcome ghost should not expose reset-ghost-welcome alias"
+  pass
+}
+
+test_welcome_ghost_stays_silent_outside_ghostty() {
+  local output
+
+  output="$(TERM=xterm bash --noprofile --norc -i -c 'source "$1"' _ "${REPO_ROOT}/.config/shell/welcome-ghost.sh" 2>/dev/null)"
+
+  assert_eq "" "${output}" "welcome ghost should not print outside Ghostty"
+  pass
+}
+
+test_main_play_welcome_ghost_ignores_boot_marker() {
+  local boot_id
+  local output
+  local page_path
+
+  page_path="$(mktemp)"
+  boot_id="manual-play-${RANDOM}-${RANDOM}"
+  : > "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+  printf 'home/animation_frames/frame_001\\":[\\"manual-play-frame\\"]' > "${page_path}"
+
+  output="$(
+    TERM=xterm-ghostty \
+    COLUMNS=30 \
+    LINES=10 \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file://${page_path}" \
+    GHOSTCONSOLE_BOOT_ID="${boot_id}" \
+    bash -c 'source "$1"; main --play-welcome-ghost' _ "${REPO_ROOT}/bootstrap.sh" 2>/dev/null
+  )"
+
+  assert_contains "manual-play-frame" "${output}" "main --play-welcome-ghost should play even when boot marker exists"
+  rm -rf "/tmp/ghostconsole-welcome-ghost-${boot_id}"
+  pass
+}
+
+test_main_play_welcome_ghost_reports_playback_failure() {
+  local output
+
+  if output="$(
+    TERM=xterm-ghostty \
+    GHOSTCONSOLE_WELCOME_GHOST_FORCE=1 \
+    GHOSTCONSOLE_GHOSTTY_PAGE_URL="file:///tmp/ghostconsole-missing-welcome-page-${RANDOM}" \
+    bash -c 'source "$1"; main --play-welcome-ghost' _ "${REPO_ROOT}/bootstrap.sh" 2>&1
+  )"; then
+    fail "main --play-welcome-ghost should return non-zero when playback fails"
+  fi
+
+  assert_contains "welcome ghost playback failed" "${output}" "manual welcome ghost playback should explain renderer failure"
+  pass
+}
+
 test_main_rejects_linux_non_ubuntu_before_install() {
   local output
 
@@ -267,7 +712,7 @@ test_main_rejects_linux_non_ubuntu_before_install() {
       [[ "$1" == /etc/os-release ]] || return 1
       ID=debian
     }
-    main
+    main --install
   ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
     fail "non-Ubuntu Linux should not complete main"
   fi
@@ -294,7 +739,7 @@ test_main_reads_linux_id_from_os_release() {
       [[ "$1" == /etc/os-release ]] || return 1
       ID=ubuntu
     }
-    main
+    main --install
   ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
     fail "Linux id should come from /etc/os-release: ${output}"
   fi
@@ -358,6 +803,45 @@ test_sourcing_bootstrap_does_not_run_main() {
   output="$(bash -c 'source "$1"' _ "${REPO_ROOT}/bootstrap.sh")"
 
   assert_eq "" "${output}" "sourcing bootstrap.sh should not execute main"
+  pass
+}
+
+test_sourcing_bootstrap_from_zsh_keeps_shell_alive() {
+  local output
+
+  output="$(zsh -f -i -c 'source "$1" >/dev/null; print ZSH_AFTER_SOURCE' _ "${REPO_ROOT}/bootstrap.sh" 2>/dev/null)"
+
+  assert_contains "ZSH_AFTER_SOURCE" "${output}" "sourcing bootstrap.sh from zsh should not close the shell"
+  pass
+}
+
+test_bootstrap_prefill_line_uses_source_invocation() {
+  local output
+
+  output="$(GHOSTCONSOLE_BOOTSTRAP_INVOCATION="../GhostConsole/bootstrap.sh" bootstrap_prefill_line)"
+
+  assert_eq "../GhostConsole/bootstrap.sh --" "${output}" "prefill line should use the path from the source command"
+  pass
+}
+
+test_interactive_sourcing_bootstrap_loads_bash_completion() {
+  local workdir
+  local output
+
+  workdir="$(mktemp -d)"
+
+  output="$(HOME="${workdir}" GHOSTCONSOLE_ROOT="${workdir}/repo" bash --noprofile --norc -i -c '
+    source "$1"
+    complete -p ./bootstrap.sh
+    COMP_WORDS=(./bootstrap.sh --)
+    COMP_CWORD=1
+    _ghostconsole_bootstrap_complete
+    printf "%s\n" "${COMPREPLY[@]}"
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>/dev/null)"
+
+  assert_not_contains "Usage: ./bootstrap.sh [option]" "${output}" "interactive source should not print help"
+  assert_contains "complete -F _ghostconsole_bootstrap_complete ./bootstrap.sh" "${output}" "interactive source should register bash completion for ./bootstrap.sh"
+  assert_contains "--install" "${output}" "interactive source should complete --install"
   pass
 }
 
@@ -779,9 +1263,11 @@ test_apply_repo_config_symlinks_repo_config_under_dotconfig() {
   [[ -L "${workdir}/.config/ghostty" ]] || fail "ghostty config should be symlinked"
   [[ -L "${workdir}/.config/zsh" ]] || fail "zsh config should be symlinked"
   [[ -L "${workdir}/.config/git" ]] || fail "git config should be symlinked"
+  [[ -L "${workdir}/.config/shell" ]] || fail "shell config should be symlinked"
   assert_eq "${REPO_ROOT}/.config/ghostty" "$(readlink "${workdir}/.config/ghostty")" "ghostty config link should point to repo config"
   assert_eq "${REPO_ROOT}/.config/zsh" "$(readlink "${workdir}/.config/zsh")" "zsh config link should point to repo config"
   assert_eq "${REPO_ROOT}/.config/git" "$(readlink "${workdir}/.config/git")" "git config link should point to repo config"
+  assert_eq "${REPO_ROOT}/.config/shell" "$(readlink "${workdir}/.config/shell")" "shell config link should point to repo config"
   pass
 }
 
@@ -835,6 +1321,39 @@ test_apply_repo_config_accepts_existing_managed_home_loaders() {
   pass
 }
 
+test_apply_repo_config_adds_bash_welcome_loader() {
+  local workdir
+
+  workdir="$(mktemp -d)"
+  printf '# existing bashrc\n' > "${workdir}/.bashrc"
+
+  ghostconsole_test_apply_repo_config_in_home "${workdir}" "20260424-120000"
+
+  assert_contains '# >>> GhostConsole welcome ghost >>>' "$(< "${workdir}/.bashrc")" "bootstrap should add managed bash welcome block"
+  assert_contains 'source "${HOME}/.config/shell/welcome-ghost.sh"' "$(< "${workdir}/.bashrc")" "bash welcome block should source home shell config"
+  assert_contains '# existing bashrc' "$(< "${workdir}/.bashrc")" "bash welcome block should preserve existing bashrc contents"
+  pass
+}
+
+test_apply_repo_config_keeps_bash_welcome_loader_idempotent() {
+  local workdir
+  local count
+
+  workdir="$(mktemp -d)"
+
+  ghostconsole_test_apply_repo_config_in_home "${workdir}" "20260424-120000"
+  ghostconsole_test_apply_repo_config_in_home "${workdir}" "20260424-120001"
+
+  count="$(python3 - <<'PY' "${workdir}/.bashrc"
+from pathlib import Path
+import sys
+print(Path(sys.argv[1]).read_text().count("# >>> GhostConsole welcome ghost >>>"))
+PY
+)"
+  assert_eq "1" "${count}" "bash welcome block should not duplicate on rerun"
+  pass
+}
+
 test_apply_repo_config_backs_up_zshrc_symlink_before_rewrite() {
   local workdir
   local backup_root
@@ -868,6 +1387,7 @@ test_uninstall_config_removes_only_managed_links_and_loaders() {
   ln -s "${REPO_ROOT}/.config/git" "${workdir}/.config/git"
   printf 'source "%s/.config/zsh/.zshrc"\n' "${REPO_ROOT}" > "${workdir}/.zshrc"
   printf '[include]\n    path = %s/.config/git/config\n' "${REPO_ROOT}" > "${workdir}/.gitconfig"
+  printf '# >>> GhostConsole welcome ghost >>>\n[[ -r "%s/.config/shell/welcome-ghost.sh" ]] && source "%s/.config/shell/welcome-ghost.sh"\n# <<< GhostConsole welcome ghost <<<\n' "${REPO_ROOT}" "${REPO_ROOT}" > "${workdir}/.bashrc"
   printf 'legacy backup\n' > "${backup_root}/zshrc-20260424-120000"
 
   HOME="${workdir}" GHOSTCONSOLE_ROOT="${REPO_ROOT}" GHOSTCONSOLE_BACKUP_ROOT="${backup_root}" uninstall_config
@@ -877,6 +1397,7 @@ test_uninstall_config_removes_only_managed_links_and_loaders() {
   [[ ! -e "${workdir}/.config/git" && ! -L "${workdir}/.config/git" ]] || fail "managed git symlink should be removed"
   [[ ! -e "${workdir}/.zshrc" ]] || fail "managed ~/.zshrc loader should be removed"
   [[ ! -e "${workdir}/.gitconfig" ]] || fail "managed ~/.gitconfig loader should be removed"
+  assert_eq "" "$(< "${workdir}/.bashrc")" "managed bash welcome block should be removed"
   [[ -f "${backup_root}/zshrc-20260424-120000" ]] || fail "uninstall should leave backups untouched"
   pass
 }
@@ -979,12 +1500,85 @@ test_print_summary_reports_installed_tools_and_linked_targets() {
   output="$(print_summary)"
 
   assert_contains "[GhostConsole-Installer] bootstrap complete" "${output}" "print_summary should report completion"
-  assert_contains "[GhostConsole-Installer] installed: ghostty, zsh, git" "${output}" "print_summary should list installed tools"
-  assert_contains "[GhostConsole-Installer] linked: ~/.config/ghostty ~/.config/zsh ~/.config/git ~/.zshrc ~/.gitconfig" "${output}" "print_summary should list linked targets"
+  assert_contains "[GhostConsole-Installer] installed: ghostty, zsh, git, ncdu, btop, lazygit, lazydocker, Powerlevel10k, zsh-autosuggestions" "${output}" "print_summary should list installed tools"
+  assert_contains "[GhostConsole-Installer] linked: ~/.config/ghostty ~/.config/zsh ~/.config/shell ~/.config/git ~/.zshrc ~/.gitconfig" "${output}" "print_summary should list linked targets"
   pass
 }
 
-test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
+test_print_help_lists_supported_commands() {
+  local output
+
+  output="$(print_help)"
+
+  assert_not_contains "source ./bootstrap.sh # To get tab completion for Usage." "${output}" "plain help should not include the source instruction"
+  assert_contains "Usage: ./bootstrap.sh [option]" "${output}" "help should show usage"
+  assert_contains "--install" "${output}" "help should list full install"
+  assert_contains "-h, --help" "${output}" "help should list help flags"
+  assert_not_contains "--completion-source" "${output}" "help should not expose internal completion source mode"
+  assert_contains "--update-tui-tools" "${output}" "help should list TUI tool update"
+  assert_not_contains "--tui-tools" "${output}" "help should not list old TUI-only install flag"
+  assert_contains "--play-welcome-ghost" "${output}" "help should list manual welcome ghost playback"
+  assert_contains "--cursor-cli" "${output}" "help should list Cursor CLI install"
+  assert_contains "--uninstall" "${output}" "help should list uninstall"
+  assert_contains "--uninstall --cursor-cli" "${output}" "help should list Cursor CLI uninstall"
+  assert_contains "--uninstall --packages" "${output}" "help should list package uninstall"
+  pass
+}
+
+test_print_completion_lists_supported_flags() {
+  local output
+
+  output="$(print_completion)"
+
+  assert_contains "--install" "${output}" "completion should include full install"
+  assert_contains "--update-tui-tools" "${output}" "completion should include TUI tool update"
+  assert_not_contains "--tui-tools" "${output}" "completion should not include old TUI-only install flag"
+  assert_contains "--play-welcome-ghost" "${output}" "completion should include manual welcome ghost playback"
+  assert_contains "--cursor-cli" "${output}" "completion should include Cursor CLI"
+  assert_contains "--uninstall" "${output}" "completion should include uninstall"
+  assert_contains "--packages" "${output}" "completion should include package uninstall"
+  pass
+}
+
+test_print_completion_source_sources_repo_completion_for_current_shell() {
+  local output
+
+  output="$(GHOSTCONSOLE_BOOTSTRAP_INVOCATION="../GhostConsole/bootstrap.sh" print_completion_source)"
+
+  assert_contains 'if [ -n "${BASH_VERSION-}" ]; then' "${output}" "completion source should support bash"
+  assert_contains 'complete -F _ghostconsole_bootstrap_complete ./bootstrap.sh bootstrap.sh' "${output}" "completion source should register bash completion"
+  assert_contains '../GhostConsole/bootstrap.sh' "${output}" "completion source should register the sourced bootstrap path"
+  assert_contains 'elif [ -n "${ZSH_VERSION-}" ]; then' "${output}" "completion source should support zsh"
+  assert_contains 'fpath=("' "${output}" "completion source should update zsh fpath"
+  assert_contains '/.config/shell/completions" ${fpath})' "${output}" "completion source should include shared shell completions path"
+  assert_not_contains '/.config/zsh/completions" ${fpath})' "${output}" "completion source should not include old zsh-only completions path"
+  assert_contains 'autoload -Uz compinit' "${output}" "completion source should load zsh compinit"
+  assert_contains 'compinit' "${output}" "completion source should initialize zsh completion"
+  assert_not_contains "[GhostConsole-Installer]" "${output}" "completion source should emit only shell code"
+  pass
+}
+
+test_install_bootstrap_completion_writes_repo_shell_completion() {
+  local workdir
+  local completion_path
+  local output
+
+  workdir="$(mktemp -d)"
+  GHOSTCONSOLE_ROOT="${workdir}/repo"
+  completion_path="${GHOSTCONSOLE_ROOT}/.config/shell/completions/_bootstrap.sh"
+
+  output="$(install_bootstrap_completion)"
+
+  [[ -f "${completion_path}" ]] || fail "install_bootstrap_completion should write repo shell completion file"
+  [[ ! -e "${GHOSTCONSOLE_ROOT}/.config/zsh/completions/_bootstrap.sh" ]] || fail "install_bootstrap_completion should not write old zsh-specific completion file"
+  assert_contains "--install" "$(< "${completion_path}")" "installed completion should include --install"
+  assert_contains "installed bootstrap completion" "${output}" "install_bootstrap_completion should report completion"
+  assert_not_contains "${completion_path}" "${output}" "install_bootstrap_completion should not print the completion path"
+  GHOSTCONSOLE_ROOT="${REPO_ROOT}"
+  pass
+}
+
+test_main_install_orchestrates_install_link_verify_and_summary_in_order() {
   local workdir
   local trace_file
 
@@ -995,14 +1589,45 @@ test_main_linux_orchestrates_install_link_verify_and_summary_in_order() {
     printf 'install:ubuntu\n' >> "${trace_file}"
   }
   install_powerlevel10k() { printf 'install-powerlevel10k\n' >> "${trace_file}"; }
+  install_zsh_autosuggestions() { printf 'install-zsh-autosuggestions\n' >> "${trace_file}"; }
   apply_repo_config() { printf 'apply-repo-config\n' >> "${trace_file}"; }
   verify_installation() { printf 'verify-install\n' >> "${trace_file}"; }
   verify_links() { printf 'verify-links\n' >> "${trace_file}"; }
   print_summary() { printf 'summary\n' >> "${trace_file}"; }
 
-  main
+  main --install
 
-  assert_eq $'install:ubuntu\ninstall-powerlevel10k\napply-repo-config\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main should install before applying repo layout and verify before summary"
+  assert_eq $'install:ubuntu\ninstall-powerlevel10k\ninstall-zsh-autosuggestions\napply-repo-config\nverify-install\nverify-links\nsummary' "$(< "${trace_file}")" "main --install should install before applying repo layout and verify before summary"
+  pass
+}
+
+test_main_without_flags_prints_help_without_installing_completion() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+  : > "${trace_file}"
+
+  install_bootstrap_completion() { printf 'SHOULD_NOT_INSTALL_COMPLETION\n' >> "${trace_file}"; }
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  install_cursor_cli() { printf 'SHOULD_NOT_INSTALL_CURSOR_CLI\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  uninstall_cursor_cli() { printf 'SHOULD_NOT_UNINSTALL_CURSOR_CLI\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  output="$(main)"
+
+  assert_eq '' "$(< "${trace_file}")" "main without flags should not install completion"
+  assert_contains "Usage: ./bootstrap.sh [option]" "${output}" "main without flags should print help"
+  assert_contains 'source ./bootstrap.sh' "${output}" "main without flags should explain how to load completion into the current shell"
   pass
 }
 
@@ -1049,6 +1674,145 @@ test_main_uninstall_packages_removes_config_and_ghostty_only() {
   pass
 }
 
+test_main_uninstall_cursor_cli_removes_only_cursor_cli() {
+  local workdir
+  local trace_file
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  install_cursor_cli() { printf 'SHOULD_NOT_INSTALL_CURSOR_CLI\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  uninstall_cursor_cli() { printf 'uninstall-cursor-cli\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  main --uninstall --cursor-cli
+
+  assert_eq 'uninstall-cursor-cli' "$(< "${trace_file}")" "main --uninstall --cursor-cli should only remove Cursor CLI"
+  pass
+}
+
+test_main_update_tui_tools_updates_only_tui_tools() {
+  local workdir
+  local trace_file
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  update_tui_tools() { printf 'update-tui-tools\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  main --update-tui-tools
+
+  assert_eq 'update-tui-tools' "$(< "${trace_file}")" "main --update-tui-tools should only update TUI tools"
+  pass
+}
+
+test_main_cursor_cli_installs_only_cursor_cli() {
+  local workdir
+  local trace_file
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  install_cursor_cli() { printf 'install-cursor-cli\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  main --cursor-cli
+
+  assert_eq 'install-cursor-cli' "$(< "${trace_file}")" "main --cursor-cli should only install Cursor CLI"
+  pass
+}
+
+test_main_help_prints_help_without_installing() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+  : > "${trace_file}"
+
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  output="$(main -h)"
+
+  assert_contains "source ./bootstrap.sh # To get tab completion for Usage." "${output}" "main -h should explain how to install completion"
+  assert_contains "Usage: ./bootstrap.sh [option]" "${output}" "main -h should print help"
+  assert_eq '' "$(< "${trace_file}")" "main -h should not install, uninstall, apply, verify, or summarize"
+  pass
+}
+
+test_main_help_highlights_source_instruction_when_color_forced() {
+  local output
+
+  output="$(GHOSTCONSOLE_COLOR=always main -h)"
+
+  assert_contains $'\033[36msource ./bootstrap.sh\033[0m # To get tab completion for Usage.' "${output}" "main -h should highlight only the source command when color is forced"
+  pass
+}
+
+test_main_rejects_unrecognized_flag_without_installing_or_completion() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+  : > "${trace_file}"
+
+  install_packages() { printf 'SHOULD_NOT_INSTALL\n' >> "${trace_file}"; }
+  install_bootstrap_completion() { printf 'SHOULD_NOT_INSTALL_COMPLETION\n' >> "${trace_file}"; }
+  install_tui_tools() { printf 'SHOULD_NOT_INSTALL_TUI\n' >> "${trace_file}"; }
+  install_powerlevel10k() { printf 'SHOULD_NOT_INSTALL_P10K\n' >> "${trace_file}"; }
+  uninstall_config() { printf 'SHOULD_NOT_UNINSTALL_CONFIG\n' >> "${trace_file}"; }
+  uninstall_packages() { printf 'SHOULD_NOT_UNINSTALL_PACKAGES\n' >> "${trace_file}"; }
+  apply_repo_config() { printf 'SHOULD_NOT_APPLY\n' >> "${trace_file}"; }
+  verify_installation() { printf 'SHOULD_NOT_VERIFY_INSTALL\n' >> "${trace_file}"; }
+  verify_links() { printf 'SHOULD_NOT_VERIFY_LINKS\n' >> "${trace_file}"; }
+  print_summary() { printf 'SHOULD_NOT_SUMMARY\n' >> "${trace_file}"; }
+
+  if output="$(main --wat 2>&1)"; then
+    fail "main should reject unrecognized flags"
+  fi
+
+  assert_contains "unrecognized option: --wat" "${output}" "main should explain unrecognized flag"
+  assert_contains "Usage: ./bootstrap.sh [option]" "${output}" "main should print help after unrecognized flag"
+  assert_eq '' "$(< "${trace_file}")" "main should not install, uninstall, apply, verify, summarize, or install completion after unrecognized flag"
+  pass
+}
+
 test_main_does_not_print_summary_when_verification_fails() {
   local workdir
   local trace_file
@@ -1061,6 +1825,7 @@ test_main_does_not_print_summary_when_verification_fails() {
     source "$1"
     install_packages() { printf "install\n" >> "${TRACE_FILE}"; }
     install_powerlevel10k() { printf "install-powerlevel10k\n" >> "${TRACE_FILE}"; }
+    install_zsh_autosuggestions() { printf "install-zsh-autosuggestions\n" >> "${TRACE_FILE}"; }
     apply_repo_config() { printf "apply-repo-config\n" >> "${TRACE_FILE}"; }
     verify_installation() { printf "verify-install\n" >> "${TRACE_FILE}"; }
     verify_links() {
@@ -1069,13 +1834,13 @@ test_main_does_not_print_summary_when_verification_fails() {
       exit 1
     }
     print_summary() { printf "summary\n" >> "${TRACE_FILE}"; }
-    main
+    main --install
   ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
-    fail "main should fail when verification fails"
+    fail "main --install should fail when verification fails"
   fi
 
   assert_contains "[GhostConsole-Installer] error:" "${output}" "verification failure should use script error handling"
-  assert_eq $'install\ninstall-powerlevel10k\napply-repo-config\nverify-install\nverify-links' "$(< "${trace_file}")" "main should stop before printing the summary when verification fails"
+  assert_eq $'install\ninstall-powerlevel10k\ninstall-zsh-autosuggestions\napply-repo-config\nverify-install\nverify-links' "$(< "${trace_file}")" "main --install should stop before printing the summary when verification fails"
   pass
 }
 
@@ -1086,15 +1851,41 @@ test_linux_ubuntu_install_uses_ghostty_ubuntu_install_script
 test_linux_ubuntu_install_skips_ghostty_installer_when_present
 test_linux_ubuntu_install_reports_ghostty_installer_failure
 test_linux_ubuntu_install_falls_back_when_ghostty_installer_fails
+test_install_ubuntu_github_release_tool_installs_missing_binary
+test_install_ubuntu_github_release_tool_skips_existing_binary
+test_install_ubuntu_github_release_tool_forces_existing_binary_when_requested
+test_install_tui_tools_ubuntu_installs_only_tui_tools
+test_update_tui_tools_ubuntu_updates_tui_tools
+test_install_cursor_cli_runs_official_installer_when_missing
+test_install_cursor_cli_updates_when_agent_exists
+test_uninstall_cursor_cli_removes_local_agent_only
+test_uninstall_cursor_cli_skips_when_local_agent_missing
 test_install_powerlevel10k_clones_when_missing
 test_install_powerlevel10k_updates_existing_checkout
+test_install_zsh_autosuggestions_clones_when_missing
+test_install_zsh_autosuggestions_updates_existing_checkout
 test_zsh_config_sources_powerlevel10k
 test_zsh_config_sources_repo_powerlevel10k_config
+test_zsh_config_sources_zsh_autosuggestions
+test_powerlevel10k_config_uses_repo_config
+test_ghostty_config_sets_large_initial_window
+test_zsh_config_adds_local_bin_for_cursor_cli
+test_zsh_config_adds_repo_completions_to_fpath
+test_zsh_config_sources_welcome_ghost
+test_welcome_ghost_prints_only_in_interactive_ghostty_shell
+test_welcome_ghost_runs_once_per_boot_marker
+test_welcome_ghost_does_not_define_reset_alias
+test_welcome_ghost_stays_silent_outside_ghostty
+test_main_play_welcome_ghost_ignores_boot_marker
+test_main_play_welcome_ghost_reports_playback_failure
 test_main_rejects_linux_non_ubuntu_before_install
 test_main_reads_linux_id_from_os_release
 test_macos_install_uses_runner_without_bash_env_side_effects
 test_run_install_command_ignores_exported_function_hijacking
 test_sourcing_bootstrap_does_not_run_main
+test_sourcing_bootstrap_from_zsh_keeps_shell_alive
+test_bootstrap_prefill_line_uses_source_invocation
+test_interactive_sourcing_bootstrap_loads_bash_completion
 test_backup_existing_target_moves_it_to_backup_root
 test_backup_existing_target_preserves_original_contents
 test_backup_existing_target_avoids_name_collisions
@@ -1120,6 +1911,8 @@ test_apply_repo_config_symlinks_repo_config_under_dotconfig
 test_apply_repo_config_backs_up_conflicting_dotconfig_ghostty
 test_apply_repo_config_writes_home_loaders_with_backup
 test_apply_repo_config_accepts_existing_managed_home_loaders
+test_apply_repo_config_adds_bash_welcome_loader
+test_apply_repo_config_keeps_bash_welcome_loader_idempotent
 test_apply_repo_config_backs_up_zshrc_symlink_before_rewrite
 test_uninstall_config_removes_only_managed_links_and_loaders
 test_uninstall_config_leaves_unmanaged_paths
@@ -1128,9 +1921,20 @@ test_verify_installation_rejects_missing_ghostty
 test_verify_links_accepts_expected_repo_targets_and_home_entrypoints
 test_verify_links_rejects_wrong_home_entrypoint_contents
 test_print_summary_reports_installed_tools_and_linked_targets
-test_main_linux_orchestrates_install_link_verify_and_summary_in_order
+test_print_help_lists_supported_commands
+test_print_completion_lists_supported_flags
+test_print_completion_source_sources_repo_completion_for_current_shell
+test_install_bootstrap_completion_writes_repo_shell_completion
+test_main_install_orchestrates_install_link_verify_and_summary_in_order
+test_main_without_flags_prints_help_without_installing_completion
 test_main_uninstall_removes_config_without_installing
 test_main_uninstall_packages_removes_config_and_ghostty_only
+test_main_uninstall_cursor_cli_removes_only_cursor_cli
+test_main_update_tui_tools_updates_only_tui_tools
+test_main_cursor_cli_installs_only_cursor_cli
+test_main_help_prints_help_without_installing
+test_main_help_highlights_source_instruction_when_color_forced
+test_main_rejects_unrecognized_flag_without_installing_or_completion
 test_main_does_not_print_summary_when_verification_fails
 
 printf 'PASS: %s tests\n' "${PASS_COUNT}"
