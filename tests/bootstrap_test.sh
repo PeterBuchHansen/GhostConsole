@@ -826,6 +826,72 @@ test_main_reads_linux_id_from_os_release() {
   pass
 }
 
+test_main_install_rejects_sudo_user_execution() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+  : > "${trace_file}"
+
+  if output="$(TRACE_FILE="${trace_file}" bash -c '
+    source "$1"
+    export SUDO_USER="teammate"
+    install_packages() { printf "SHOULD_NOT_INSTALL\n" >> "${TRACE_FILE}"; }
+    install_powerlevel10k() { printf "SHOULD_NOT_INSTALL_P10K\n" >> "${TRACE_FILE}"; }
+    install_zsh_autosuggestions() { printf "SHOULD_NOT_INSTALL_ZAS\n" >> "${TRACE_FILE}"; }
+    apply_repo_config() { printf "SHOULD_NOT_APPLY\n" >> "${TRACE_FILE}"; }
+    verify_installation() { printf "SHOULD_NOT_VERIFY_INSTALL\n" >> "${TRACE_FILE}"; }
+    verify_links() { printf "SHOULD_NOT_VERIFY_LINKS\n" >> "${TRACE_FILE}"; }
+    print_summary() { printf "SHOULD_NOT_SUMMARY\n" >> "${TRACE_FILE}"; }
+    main --install
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "main --install should fail when run with sudo"
+  fi
+
+  assert_contains "do not run bootstrap.sh with sudo or as root" "${output}" "sudo guard should explain why sudo is blocked"
+  assert_contains "rerun without sudo" "${output}" "sudo guard should suggest rerunning without sudo"
+  assert_eq '' "$(< "${trace_file}")" "sudo guard should stop install before any install hooks run"
+  pass
+}
+
+test_main_install_rejects_root_execution() {
+  local workdir
+  local trace_file
+  local output
+
+  workdir="$(mktemp -d)"
+  trace_file="${workdir}/trace.log"
+  : > "${trace_file}"
+
+  if output="$(TRACE_FILE="${trace_file}" bash -c '
+    source "$1"
+    unset SUDO_USER
+    id() {
+      if [[ "$1" == "-u" ]]; then
+        printf "0\n"
+        return 0
+      fi
+      builtin command id "$@"
+    }
+    install_packages() { printf "SHOULD_NOT_INSTALL\n" >> "${TRACE_FILE}"; }
+    install_powerlevel10k() { printf "SHOULD_NOT_INSTALL_P10K\n" >> "${TRACE_FILE}"; }
+    install_zsh_autosuggestions() { printf "SHOULD_NOT_INSTALL_ZAS\n" >> "${TRACE_FILE}"; }
+    apply_repo_config() { printf "SHOULD_NOT_APPLY\n" >> "${TRACE_FILE}"; }
+    verify_installation() { printf "SHOULD_NOT_VERIFY_INSTALL\n" >> "${TRACE_FILE}"; }
+    verify_links() { printf "SHOULD_NOT_VERIFY_LINKS\n" >> "${TRACE_FILE}"; }
+    print_summary() { printf "SHOULD_NOT_SUMMARY\n" >> "${TRACE_FILE}"; }
+    main --install
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "main --install should fail when run as root"
+  fi
+
+  assert_contains "do not run bootstrap.sh with sudo or as root" "${output}" "root guard should explain why root is blocked"
+  assert_eq '' "$(< "${trace_file}")" "root guard should stop install before any install hooks run"
+  pass
+}
+
 test_macos_install_uses_runner_without_bash_env_side_effects() {
   local workdir
   local bash_env_path
@@ -1960,6 +2026,8 @@ test_main_play_welcome_ghost_ignores_boot_marker
 test_main_play_welcome_ghost_reports_playback_failure
 test_main_rejects_linux_non_ubuntu_before_install
 test_main_reads_linux_id_from_os_release
+test_main_install_rejects_sudo_user_execution
+test_main_install_rejects_root_execution
 test_macos_install_uses_runner_without_bash_env_side_effects
 test_run_install_command_ignores_exported_function_hijacking
 test_sourcing_bootstrap_does_not_run_main

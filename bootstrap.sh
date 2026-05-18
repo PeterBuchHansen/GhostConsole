@@ -752,6 +752,17 @@ print_source_instruction() {
   printf '%s %s\n\n' "${command}" "${comment}"
 }
 
+require_non_privileged_execution() {
+  local current_uid
+
+  current_uid="$(id -u 2>/dev/null || printf '%s' "${EUID-}")"
+  if [[ -n "${SUDO_USER-}" || "${current_uid}" == "0" ]]; then
+    log_error "do not run bootstrap.sh with sudo or as root; run it as your normal user."
+    log_warning "rerun without sudo (example): ./bootstrap.sh --install"
+    return 1
+  fi
+}
+
 main() {
   if [[ -z "${1-}" || "${1-}" == "-h" || "${1-}" == "--help" ]]; then
     print_source_instruction
@@ -760,11 +771,13 @@ main() {
   fi
 
   if [[ "${1-}" == "--install" ]]; then
+    require_non_privileged_execution || return 1
     run_full_install
     return 0
   fi
 
   if [[ "${1-}" == "--update-tui-tools" ]]; then
+    require_non_privileged_execution || return 1
     update_tui_tools
     return 0
   fi
@@ -775,11 +788,13 @@ main() {
   fi
 
   if [[ "${1-}" == "--cursor-cli" ]]; then
+    require_non_privileged_execution || return 1
     install_cursor_cli
     return 0
   fi
 
   if [[ "${1-}" == "--uninstall" ]]; then
+    require_non_privileged_execution || return 1
     case "${2-}" in
       --cursor-cli)
         uninstall_cursor_cli
