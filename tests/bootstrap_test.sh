@@ -516,6 +516,30 @@ test_install_powerlevel10k_reports_git_config_help_on_update_failure() {
   pass
 }
 
+test_install_powerlevel10k_reports_permission_fix_on_update_failure() {
+  local workdir
+  local plugin_path
+  local output
+
+  workdir="$(mktemp -d)"
+  plugin_path="${workdir}/repo/.config/zsh/plugins/powerlevel10k"
+  mkdir -p "${plugin_path}/.git"
+  chmod 0555 "${plugin_path}/.git"
+
+  if output="$(bash -c '
+    source "$1"
+    GHOSTCONSOLE_ROOT="$2"
+    run_install_command() { return 1; }
+    install_powerlevel10k
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${workdir}/repo" 2>&1)"; then
+    fail "Powerlevel10k update should fail when git pull command fails on a non-writable git directory"
+  fi
+
+  assert_contains "Detected likely filesystem permission issue" "${output}" "Powerlevel10k update failure should highlight permission problems when plugin path is not writable"
+  assert_contains "sudo chown -R" "${output}" "Powerlevel10k update failure should include chown ownership fix command"
+  pass
+}
+
 test_install_zsh_autosuggestions_clones_when_missing() {
   local workdir
   local plugin_path
@@ -2008,6 +2032,7 @@ test_install_powerlevel10k_updates_existing_checkout
 test_install_powerlevel10k_backs_up_non_git_path_before_reinstall
 test_install_powerlevel10k_reports_git_config_help_on_clone_failure
 test_install_powerlevel10k_reports_git_config_help_on_update_failure
+test_install_powerlevel10k_reports_permission_fix_on_update_failure
 test_install_zsh_autosuggestions_clones_when_missing
 test_install_zsh_autosuggestions_updates_existing_checkout
 test_zsh_config_sources_powerlevel10k
