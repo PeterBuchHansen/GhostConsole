@@ -1,5 +1,6 @@
 export GHOSTCONSOLE_HOME="${HOME}/.config/zsh"
 export PATH="${HOME}/.local/bin:${PATH}"
+setopt AUTO_CD
 
 [[ -r "${HOME}/.config/shell/welcome-ghost.sh" ]] && source "${HOME}/.config/shell/welcome-ghost.sh"
 
