@@ -417,7 +417,7 @@ test_install_powerlevel10k_clones_when_missing() {
   install_powerlevel10k
 
   [[ -d "$(dirname "${plugin_path}")" ]] || fail "Powerlevel10k parent directory should be created"
-  assert_eq "git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${plugin_path}" "${calls[0]}" "Powerlevel10k should be cloned when missing"
+  assert_eq "git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \"${plugin_path}\"" "${calls[0]}" "Powerlevel10k should be cloned when missing"
   GHOSTCONSOLE_ROOT="${REPO_ROOT}"
   pass
 }
@@ -438,8 +438,81 @@ test_install_powerlevel10k_updates_existing_checkout() {
 
   install_powerlevel10k
 
-  assert_eq "git -C ${plugin_path} pull --ff-only" "${calls[0]}" "Powerlevel10k should update an existing checkout"
+  assert_eq "git -C \"${plugin_path}\" pull --ff-only" "${calls[0]}" "Powerlevel10k should update an existing checkout"
   GHOSTCONSOLE_ROOT="${REPO_ROOT}"
+  pass
+}
+
+test_install_powerlevel10k_backs_up_non_git_path_before_reinstall() {
+  local workdir
+  local plugin_path
+  local backup_path
+  local -a calls=()
+
+  workdir="$(mktemp -d)"
+  GHOSTCONSOLE_ROOT="${workdir}/repo with spaces"
+  GHOSTCONSOLE_BACKUP_ROOT="${workdir}/backups"
+  plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/powerlevel10k"
+  backup_path="${GHOSTCONSOLE_BACKUP_ROOT}/powerlevel10k-20260424-120000"
+  mkdir -p "${plugin_path}"
+  printf 'legacy\n' > "${plugin_path}/README"
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  GHOSTCONSOLE_TIMESTAMP="20260424-120000" install_powerlevel10k
+
+  [[ -d "${backup_path}" ]] || fail "Powerlevel10k should back up an existing non-git path before reinstalling"
+  assert_eq 'legacy' "$(< "${backup_path}/README")" "Powerlevel10k backup should preserve existing plugin contents"
+  assert_eq "git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \"${plugin_path}\"" "${calls[0]}" "Powerlevel10k reinstall should clone into the plugin path after backup"
+  GHOSTCONSOLE_ROOT="${REPO_ROOT}"
+  GHOSTCONSOLE_BACKUP_ROOT="${HOME}/.ghostconsole-backups"
+  pass
+}
+
+test_install_powerlevel10k_reports_git_config_help_on_clone_failure() {
+  local workdir
+  local output
+
+  workdir="$(mktemp -d)"
+
+  if output="$(bash -c '
+    source "$1"
+    GHOSTCONSOLE_ROOT="$2"
+    run_install_command() { return 1; }
+    install_powerlevel10k
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${workdir}/repo" 2>&1)"; then
+    fail "Powerlevel10k install should fail when clone command fails"
+  fi
+
+  assert_contains "Failed to clone Powerlevel10k from https://github.com/romkatv/powerlevel10k.git." "${output}" "Powerlevel10k clone failure should explain what failed"
+  assert_contains "git config --global --get-regexp '^url\\..*\\.insteadof$'" "${output}" "Powerlevel10k clone failure should suggest checking git URL rewrite rules"
+  assert_contains "git ls-remote https://github.com/romkatv/powerlevel10k.git" "${output}" "Powerlevel10k clone failure should suggest direct git connectivity check"
+  pass
+}
+
+test_install_powerlevel10k_reports_git_config_help_on_update_failure() {
+  local workdir
+  local plugin_path
+  local output
+
+  workdir="$(mktemp -d)"
+  plugin_path="${workdir}/repo/.config/zsh/plugins/powerlevel10k"
+  mkdir -p "${plugin_path}/.git"
+
+  if output="$(bash -c '
+    source "$1"
+    GHOSTCONSOLE_ROOT="$2"
+    run_install_command() { return 1; }
+    install_powerlevel10k
+  ' _ "${REPO_ROOT}/bootstrap.sh" "${workdir}/repo" 2>&1)"; then
+    fail "Powerlevel10k update should fail when git pull command fails"
+  fi
+
+  assert_contains "Failed to update Powerlevel10k from https://github.com/romkatv/powerlevel10k.git." "${output}" "Powerlevel10k update failure should explain what failed"
+  assert_contains "git config --global --get-regexp '^url\\..*\\.insteadof$'" "${output}" "Powerlevel10k update failure should suggest checking git URL rewrite rules"
+  assert_contains "git ls-remote https://github.com/romkatv/powerlevel10k.git" "${output}" "Powerlevel10k update failure should suggest direct git connectivity check"
   pass
 }
 
@@ -459,7 +532,7 @@ test_install_zsh_autosuggestions_clones_when_missing() {
   install_zsh_autosuggestions
 
   [[ -d "$(dirname "${plugin_path}")" ]] || fail "zsh-autosuggestions parent directory should be created"
-  assert_eq "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git ${plugin_path}" "${calls[0]}" "zsh-autosuggestions should be cloned when missing"
+  assert_eq "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git \"${plugin_path}\"" "${calls[0]}" "zsh-autosuggestions should be cloned when missing"
   GHOSTCONSOLE_ROOT="${REPO_ROOT}"
   pass
 }
@@ -480,7 +553,7 @@ test_install_zsh_autosuggestions_updates_existing_checkout() {
 
   install_zsh_autosuggestions
 
-  assert_eq "git -C ${plugin_path} pull --ff-only" "${calls[0]}" "zsh-autosuggestions should update an existing checkout"
+  assert_eq "git -C \"${plugin_path}\" pull --ff-only" "${calls[0]}" "zsh-autosuggestions should update an existing checkout"
   GHOSTCONSOLE_ROOT="${REPO_ROOT}"
   pass
 }
@@ -528,6 +601,8 @@ test_ghostty_config_sets_large_initial_window() {
 
   config="$(< "${REPO_ROOT}/.config/ghostty/config")"
 
+  assert_contains 'font-size = 14' "${config}" "Ghostty config should set the font size with a valid key"
+  assert_not_contains 'Aafont-size' "${config}" "Ghostty config should not contain a misspelled font-size key"
   assert_contains 'window-width = 999' "${config}" "Ghostty config should use an oversized width because Linux startup maximize can be ignored"
   assert_contains 'window-height = 999' "${config}" "Ghostty config should use an oversized height because Linux startup maximize can be ignored"
   pass
@@ -1864,6 +1939,9 @@ test_uninstall_cursor_cli_removes_local_agent_only
 test_uninstall_cursor_cli_skips_when_local_agent_missing
 test_install_powerlevel10k_clones_when_missing
 test_install_powerlevel10k_updates_existing_checkout
+test_install_powerlevel10k_backs_up_non_git_path_before_reinstall
+test_install_powerlevel10k_reports_git_config_help_on_clone_failure
+test_install_powerlevel10k_reports_git_config_help_on_update_failure
 test_install_zsh_autosuggestions_clones_when_missing
 test_install_zsh_autosuggestions_updates_existing_checkout
 test_zsh_config_sources_powerlevel10k
