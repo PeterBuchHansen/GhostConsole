@@ -652,6 +652,15 @@ test_zsh_config_adds_repo_completions_to_fpath() {
   pass
 }
 
+test_zsh_config_enables_autocd_for_parent_directory_navigation() {
+  local config
+
+  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
+
+  assert_contains "setopt AUTO_CD" "${config}" "zsh config should enable autocd so bare .. completion is treated as a directory path in command position"
+  pass
+}
+
 test_zsh_config_sources_welcome_ghost() {
   local config
 
@@ -2042,6 +2051,7 @@ test_powerlevel10k_config_uses_repo_config
 test_ghostty_config_sets_large_initial_window
 test_zsh_config_adds_local_bin_for_cursor_cli
 test_zsh_config_adds_repo_completions_to_fpath
+test_zsh_config_enables_autocd_for_parent_directory_navigation
 test_zsh_config_sources_welcome_ghost
 test_welcome_ghost_prints_only_in_interactive_ghostty_shell
 test_welcome_ghost_runs_once_per_boot_marker
