@@ -590,6 +590,8 @@ EOF
   assert_contains 'two' "${output}" "welcome ghost should play all fetched frames"
   assert_contains $'\033[?1049h' "${output}" "welcome ghost should use the alternate screen while animating"
   assert_contains $'\033[?1049l' "${output}" "welcome ghost should leave the alternate screen after animating"
+  assert_contains $'\033[?7l' "${output}" "welcome ghost should disable autowrap while animating to avoid resize wrapping"
+  assert_contains $'\033[?7h' "${output}" "welcome ghost should restore autowrap after animating"
   assert_eq 2 "$(grep -o $'\033\\[?2026h' <<< "${output}" | wc -l | tr -d ' ')" "welcome ghost should begin synchronized output for each frame"
   assert_eq 2 "$(grep -o $'\033\\[?2026l' <<< "${output}" | wc -l | tr -d ' ')" "welcome ghost should end synchronized output for each frame"
   assert_contains $'\033[5;12H\033[0;37mone' "${output}" "welcome ghost should center frames in the terminal grid"

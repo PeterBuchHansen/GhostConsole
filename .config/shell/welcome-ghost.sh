@@ -41,16 +41,17 @@ if not frames:
     raise SystemExit(1)
 
 ansi_pattern = re.compile(r"\033\[[0-9;?]*[A-Za-z]")
-terminal_size = shutil.get_terminal_size(fallback=(120, 45))
-frame_width = max(
+animation_width = max(
     (len(ansi_pattern.sub("", line)) for frame in frames for line in frame),
     default=0,
 )
-frame_height = max((len(frame) for frame in frames), default=0)
-frame_left = max(1, ((terminal_size.columns - frame_width) // 2) + 1)
-frame_top = max(1, ((terminal_size.lines - frame_height) // 2) + 1)
+animation_height = max((len(frame) for frame in frames), default=0)
 
 def render_frame(frame):
+    terminal_size = shutil.get_terminal_size(fallback=(120, 45))
+    frame_left = max(1, ((terminal_size.columns - animation_width) // 2) + 1)
+    frame_top = max(1, ((terminal_size.lines - animation_height) // 2) + 1)
+
     sys.stdout.write("\033[?2026h\033[H\033[J")
     try:
         for row, line in enumerate(frame, start=1):
@@ -61,14 +62,14 @@ def render_frame(frame):
         sys.stdout.flush()
 
 
-sys.stdout.write("\033[?1049h\033[?25l")
+sys.stdout.write("\033[?1049h\033[?25l\033[?7l")
 try:
     for frame in frames:
         render_frame(frame)
         if delay > 0:
             time.sleep(delay)
 finally:
-    sys.stdout.write("\033[?25h\033[?1049l")
+    sys.stdout.write("\033[?7h\033[?25h\033[?1049l")
     sys.stdout.flush()
 PY
 }
