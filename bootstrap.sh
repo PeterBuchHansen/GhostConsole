@@ -294,13 +294,44 @@ run_install_command() {
   ' _ "${command}"
 }
 
+is_git_plugin_permission_issue() {
+  local plugin_path="$1"
+  local git_dir="${plugin_path}/.git"
+
+  [[ -e "${plugin_path}" ]] || return 1
+
+  if [[ ! -w "${plugin_path}" ]]; then
+    return 0
+  fi
+  if [[ -d "${git_dir}" && ! -w "${git_dir}" ]]; then
+    return 0
+  fi
+  if [[ -e "${git_dir}/FETCH_HEAD" && ! -w "${git_dir}/FETCH_HEAD" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 print_git_plugin_failure_help() {
   local operation="$1"
   local plugin_name="$2"
   local plugin_repo="$3"
+  local plugin_path="$4"
+  local current_user="${USER-}"
+  local current_group
 
   log_error "Failed to ${operation} ${plugin_name} from ${plugin_repo}."
-  log_warning "This can be caused by broken git URL rewrite or proxy settings."
+  log_warning "Common causes: filesystem permissions, broken git URL rewrites, or proxy settings."
+  if is_git_plugin_permission_issue "${plugin_path}"; then
+    if [[ -z "${current_user}" ]]; then
+      current_user="$(id -un 2>/dev/null || printf 'your-user')"
+    fi
+    current_group="$(id -gn 2>/dev/null || printf '%s' "${current_user}")"
+    log_warning "Detected likely filesystem permission issue at ${plugin_path} (often caused by a past sudo run)."
+    log_warning "Fix ownership then rerun without sudo:"
+    log_warning "  sudo chown -R ${current_user}:${current_group} \"${plugin_path}\""
+  fi
   log_warning "Inspect URL rewrites: git config --global --get-regexp '^url\\..*\\.insteadof$'"
   log_warning "Inspect proxy config: git config --global --get-regexp '^(http|https)\\.proxy$'"
   log_warning "Verify repository access directly: git ls-remote ${plugin_repo}"
@@ -319,7 +350,7 @@ install_or_update_git_plugin() {
   if [[ -d "${plugin_path}/.git" ]]; then
     log_info "Updating ${plugin_name}..."
     if ! run_install_command "git -C \"${plugin_path}\" pull --ff-only"; then
-      print_git_plugin_failure_help "update" "${plugin_name}" "${plugin_repo}"
+      print_git_plugin_failure_help "update" "${plugin_name}" "${plugin_repo}" "${plugin_path}"
       exit 1
     fi
     return 0
@@ -332,7 +363,7 @@ install_or_update_git_plugin() {
 
   log_info "Installing ${plugin_name}..."
   if ! run_install_command "git clone --depth=1 ${plugin_repo} \"${plugin_path}\""; then
-    print_git_plugin_failure_help "clone" "${plugin_name}" "${plugin_repo}"
+    print_git_plugin_failure_help "clone" "${plugin_name}" "${plugin_repo}" "${plugin_path}"
     exit 1
   fi
 }
