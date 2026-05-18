@@ -294,44 +294,61 @@ run_install_command() {
   ' _ "${command}"
 }
 
-install_powerlevel10k() {
-  local plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/powerlevel10k"
+print_git_plugin_failure_help() {
+  local operation="$1"
+  local plugin_name="$2"
+  local plugin_repo="$3"
+
+  log_error "Failed to ${operation} ${plugin_name} from ${plugin_repo}."
+  log_warning "This can be caused by broken git URL rewrite or proxy settings."
+  log_warning "Inspect URL rewrites: git config --global --get-regexp '^url\\..*\\.insteadof$'"
+  log_warning "Inspect proxy config: git config --global --get-regexp '^(http|https)\\.proxy$'"
+  log_warning "Verify repository access directly: git ls-remote ${plugin_repo}"
+  log_warning "If a rewrite is wrong, remove it: git config --global --unset-all url.<bad-base>.insteadof"
+  log_warning "If a proxy is required, set one: git config --global http.proxy http://<proxy-host>:<proxy-port>"
+  log_warning "After fixing git config, rerun: ./bootstrap.sh --install"
+}
+
+install_or_update_git_plugin() {
+  local plugin_name="$1"
+  local plugin_repo="$2"
+  local plugin_path="$3"
 
   mkdir -p "$(dirname "${plugin_path}")"
 
   if [[ -d "${plugin_path}/.git" ]]; then
-    log_info "Updating Powerlevel10k..."
-    run_install_command "git -C ${plugin_path} pull --ff-only"
+    log_info "Updating ${plugin_name}..."
+    if ! run_install_command "git -C \"${plugin_path}\" pull --ff-only"; then
+      print_git_plugin_failure_help "update" "${plugin_name}" "${plugin_repo}"
+      exit 1
+    fi
     return 0
   fi
 
   if [[ -e "${plugin_path}" ]]; then
-    log_error "refusing Powerlevel10k install at ${plugin_path}: path exists but is not a git checkout."
-    exit 1
+    log_warning "${plugin_name} path exists without git metadata; backing it up and reinstalling."
+    backup_existing_target "${plugin_path}" "${GHOSTCONSOLE_BACKUP_ROOT}"
   fi
 
-  log_info "Installing Powerlevel10k..."
-  run_install_command "git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${plugin_path}"
+  log_info "Installing ${plugin_name}..."
+  if ! run_install_command "git clone --depth=1 ${plugin_repo} \"${plugin_path}\""; then
+    print_git_plugin_failure_help "clone" "${plugin_name}" "${plugin_repo}"
+    exit 1
+  fi
+}
+
+install_powerlevel10k() {
+  install_or_update_git_plugin \
+    "Powerlevel10k" \
+    "https://github.com/romkatv/powerlevel10k.git" \
+    "${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/powerlevel10k"
 }
 
 install_zsh_autosuggestions() {
-  local plugin_path="${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/zsh-autosuggestions"
-
-  mkdir -p "$(dirname "${plugin_path}")"
-
-  if [[ -d "${plugin_path}/.git" ]]; then
-    log_info "Updating zsh-autosuggestions..."
-    run_install_command "git -C ${plugin_path} pull --ff-only"
-    return 0
-  fi
-
-  if [[ -e "${plugin_path}" ]]; then
-    log_error "refusing zsh-autosuggestions install at ${plugin_path}: path exists but is not a git checkout."
-    exit 1
-  fi
-
-  log_info "Installing zsh-autosuggestions..."
-  run_install_command "git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions.git ${plugin_path}"
+  install_or_update_git_plugin \
+    "zsh-autosuggestions" \
+    "https://github.com/zsh-users/zsh-autosuggestions.git" \
+    "${GHOSTCONSOLE_ROOT}/.config/zsh/plugins/zsh-autosuggestions"
 }
 
 backup_existing_target() {
