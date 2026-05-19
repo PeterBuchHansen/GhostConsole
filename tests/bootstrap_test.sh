@@ -101,7 +101,7 @@ test_macos_install_invokes_ghostty_first() {
 
   [[ "${#calls[@]}" == 2 ]] || fail "macos_install should run two install commands"
   assert_eq 'brew install --cask ghostty' "${calls[0]}" "macos_install should install Ghostty first"
-  assert_eq 'brew install zsh git ncdu btop lazygit lazydocker' "${calls[1]}" "macos_install should install zsh, git, and TUI tools after Ghostty"
+  assert_eq 'brew install zsh git coreutils ncdu btop lazygit lazydocker' "${calls[1]}" "macos_install should install zsh, git, coreutils, and TUI tools after Ghostty"
   pass
 }
 
