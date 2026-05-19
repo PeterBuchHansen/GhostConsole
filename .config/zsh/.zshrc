@@ -2,7 +2,13 @@ export GHOSTCONSOLE_HOME="${HOME}/.config/zsh"
 export PATH="${HOME}/.local/bin:${PATH}"
 setopt AUTO_CD
 
-if [[ -x /usr/bin/dircolors ]]; then
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  for coreutils_gnubin in /opt/homebrew/opt/coreutils/libexec/gnubin /usr/local/opt/coreutils/libexec/gnubin; do
+    [[ -d "${coreutils_gnubin}" ]] && PATH="${coreutils_gnubin}:${PATH}"
+  done
+fi
+
+if command -v dircolors >/dev/null 2>&1; then
   if [[ -r "${HOME}/.dircolors" ]]; then
     eval "$(dircolors -b "${HOME}/.dircolors")"
   else

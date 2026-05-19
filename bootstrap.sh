@@ -105,7 +105,7 @@ macos_install() {
 
   log_info "Installing packages on macOS (Ghostty first)..."
   run_install_command 'brew install --cask ghostty'
-  run_install_command 'brew install zsh git ncdu btop lazygit lazydocker'
+  run_install_command 'brew install zsh git coreutils ncdu btop lazygit lazydocker'
 }
 
 linux_ubuntu_install() {
