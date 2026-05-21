@@ -1604,7 +1604,7 @@ test_print_help_lists_supported_commands() {
   assert_contains "-h, --help" "${output}" "help should list help flags"
   assert_not_contains "--completion-source" "${output}" "help should not expose internal completion source mode"
   assert_contains "--update-tui-tools" "${output}" "help should list TUI tool update"
-  assert_not_contains "--tui-tools" "${output}" "help should not list old TUI-only install flag"
+  assert_not_contains "--uninstall --tui-tools" "${output}" "help should not list TUI-only uninstall"
   assert_contains "--play-welcome-ghost" "${output}" "help should list manual welcome ghost playback"
   assert_contains "--cursor-cli" "${output}" "help should list Cursor CLI install"
   assert_contains "--uninstall" "${output}" "help should list uninstall"
@@ -1620,7 +1620,7 @@ test_print_completion_lists_supported_flags() {
 
   assert_contains "--install" "${output}" "completion should include full install"
   assert_contains "--update-tui-tools" "${output}" "completion should include TUI tool update"
-  assert_not_contains "--tui-tools" "${output}" "completion should not include old TUI-only install flag"
+  assert_not_contains "--tui-tools" "${output}" "completion should not include TUI-only uninstall flag"
   assert_contains "--play-welcome-ghost" "${output}" "completion should include manual welcome ghost playback"
   assert_contains "--cursor-cli" "${output}" "completion should include Cursor CLI"
   assert_contains "--uninstall" "${output}" "completion should include uninstall"
