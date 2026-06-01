@@ -105,7 +105,11 @@ macos_install() {
 
   log_info "Installing packages on macOS (Ghostty first)..."
   run_install_command 'brew install --cask ghostty'
-  run_install_command 'brew install zsh git coreutils ncdu btop lazygit lazydocker'
+  run_install_command 'brew install zsh git coreutils ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
+  install_openapi_tui
+  install_mdterm
+  install_navix
 }
 
 linux_ubuntu_install() {
@@ -139,9 +143,13 @@ rm -f "${deb_file}"'; then
       fi
     fi
   fi
-  run_install_command 'sudo apt-get install -y zsh git ncdu btop'
+  run_install_command 'sudo apt-get install -y zsh git ncdu btop bat neovim lnav'
+  ensure_bat_command
   install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
   install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker
+  install_openapi_tui
+  install_mdterm
+  install_navix
 }
 
 macos_tui_tools_install() {
@@ -151,14 +159,22 @@ macos_tui_tools_install() {
   fi
 
   log_info "Installing TUI tools on macOS..."
-  run_install_command 'brew install ncdu btop lazygit lazydocker'
+  run_install_command 'brew install ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
+  install_openapi_tui
+  install_mdterm
+  install_navix
 }
 
 linux_ubuntu_tui_tools_install() {
   log_info "Installing TUI tools on Ubuntu..."
-  run_install_command 'sudo apt-get install -y ncdu btop'
+  run_install_command 'sudo apt-get install -y ncdu btop bat neovim lnav'
+  ensure_bat_command
   install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
   install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker
+  install_openapi_tui
+  install_mdterm
+  install_navix
 }
 
 macos_tui_tools_update() {
@@ -168,14 +184,22 @@ macos_tui_tools_update() {
   fi
 
   log_info "Updating TUI tools on macOS..."
-  run_install_command 'brew update && brew upgrade ncdu btop lazygit lazydocker || brew install ncdu btop lazygit lazydocker'
+  run_install_command 'brew update && brew upgrade ncdu btop bat neovim lnav lazygit lazydocker || brew install ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
+  install_openapi_tui force
+  install_mdterm force
+  install_navix force
 }
 
 linux_ubuntu_tui_tools_update() {
   log_info "Updating TUI tools on Ubuntu..."
-  run_install_command 'sudo apt-get update && sudo apt-get install -y ncdu btop'
+  run_install_command 'sudo apt-get update && sudo apt-get install -y ncdu btop bat neovim lnav'
+  ensure_bat_command
   install_ubuntu_github_release_tool lazygit jesseduffield/lazygit force
   install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker force
+  install_openapi_tui force
+  install_mdterm force
+  install_navix force
 }
 
 install_tui_tools() {
@@ -260,6 +284,135 @@ archive=\"${binary_name}_\${version}_Linux_\${arch}.tar.gz\"
 curl -fL -o \"\${archive}\" \"https://github.com/${github_repo}/releases/download/\${tag}/\${archive}\"
 tar -xzf \"\${archive}\" ${binary_name}
 sudo install -m 0755 ${binary_name} /usr/local/bin/${binary_name}"
+}
+
+ensure_bat_command() {
+  if command -v bat >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! command -v batcat >/dev/null 2>&1; then
+    log_warning "batcat not found; skipping bat alias setup."
+    return 0
+  fi
+
+  log_info "Linking batcat to bat..."
+  run_install_command 'sudo ln -sfn "$(command -v batcat)" /usr/local/bin/bat'
+}
+
+install_openapi_tui() {
+  local mode="${1-}"
+
+  if [[ "${mode}" != "force" ]] && command -v openapi-tui >/dev/null 2>&1; then
+    log_info "openapi-tui already installed; skipping."
+    return 0
+  fi
+
+  log_info "Installing openapi-tui from GitHub releases..."
+  run_install_command 'set -euo pipefail
+os="$(uname -s)"
+arch="$(uname -m)"
+
+case "${os}" in
+  Linux) os="linux" ;;
+  Darwin) os="macos" ;;
+  *) printf "Unsupported OS for openapi-tui: %s\n" "${os}" >&2; exit 1 ;;
+esac
+
+case "${arch}" in
+  x86_64|amd64) arch="x86_64" ;;
+  aarch64|arm64) arch="arm64" ;;
+  *) printf "Unsupported architecture for openapi-tui: %s\n" "${arch}" >&2; exit 1 ;;
+esac
+
+workdir="$(mktemp -d)"
+trap '\''rm -rf "${workdir}"'\'' EXIT
+cd "${workdir}"
+latest_url="$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/zaghaghi/openapi-tui/releases/latest)"
+tag="${latest_url##*/}"
+version="${tag#v}"
+archive="openapi-tui-${version}-${os}-${arch}.tar.gz"
+curl -fL -o "${archive}" "https://github.com/zaghaghi/openapi-tui/releases/download/${tag}/${archive}"
+tar -xzf "${archive}" openapi-tui
+sudo install -m 0755 openapi-tui /usr/local/bin/openapi-tui'
+}
+
+install_mdterm() {
+  local mode="${1-}"
+
+  if [[ "${mode}" != "force" ]] && command -v markless >/dev/null 2>&1; then
+    log_info "markless already installed; skipping."
+    return 0
+  fi
+
+  log_info "Installing markless from GitHub releases..."
+  run_install_command 'set -euo pipefail
+os="$(uname -s)"
+arch="$(uname -m)"
+
+case "${os}" in
+  Linux) os="unknown-linux-gnu" ;;
+  Darwin) os="apple-darwin" ;;
+  *) printf "Unsupported OS for markless: %s\n" "${os}" >&2; exit 1 ;;
+esac
+
+case "${arch}" in
+  x86_64|amd64) arch="x86_64" ;;
+  aarch64|arm64) arch="aarch64" ;;
+  *) printf "Unsupported architecture for markless: %s\n" "${arch}" >&2; exit 1 ;;
+esac
+
+workdir="$(mktemp -d)"
+trap '\''rm -rf "${workdir}"'\'' EXIT
+cd "${workdir}"
+latest_url="$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/jvanderberg/markless/releases/latest)"
+tag="${latest_url##*/}"
+archive="markless-${arch}-${os}.tar.gz"
+curl -fL -o "${archive}" "https://github.com/jvanderberg/markless/releases/download/${tag}/${archive}"
+tar -xzf "${archive}" markless
+sudo install -m 0755 markless /usr/local/bin/markless'
+}
+
+install_navix() {
+  local mode="${1-}"
+
+  if [[ "${mode}" != "force" ]] && command -v navix >/dev/null 2>&1; then
+    log_info "navix already installed; skipping."
+    return 0
+  fi
+
+  log_info "Installing navix from GitHub releases..."
+  run_install_command 'set -euo pipefail
+os="$(uname -s)"
+arch="$(uname -m)"
+
+case "${os}" in
+  Linux) os="unknown-linux-gnu" ;;
+  Darwin) os="apple-darwin" ;;
+  *) printf "Unsupported OS for navix: %s\n" "${os}" >&2; exit 1 ;;
+esac
+
+case "${arch}" in
+  x86_64|amd64) arch="x86_64" ;;
+  aarch64|arm64) arch="aarch64" ;;
+  *) printf "Unsupported architecture for navix: %s\n" "${arch}" >&2; exit 1 ;;
+esac
+
+target="${arch}-${os}"
+if [[ "${target}" == "aarch64-unknown-linux-gnu" ]]; then
+  printf "Unsupported architecture for navix on Linux: %s\n" "${arch}" >&2
+  exit 1
+fi
+
+workdir="$(mktemp -d)"
+trap '\''rm -rf "${workdir}"'\'' EXIT
+cd "${workdir}"
+latest_url="$(curl -fsSLI -o /dev/null -w "%{url_effective}" https://github.com/PeterBuchHansen/navix/releases/latest)"
+tag="${latest_url##*/}"
+archive="navix-${tag}-${target}.tar.gz"
+curl -fL -o "${archive}" "https://github.com/PeterBuchHansen/navix/releases/download/${tag}/${archive}"
+tar -xzf "${archive}" navix
+sudo install -m 0755 navix /usr/local/bin/navix'
 }
 
 install_cursor_cli() {
@@ -478,6 +631,9 @@ write_bash_welcome_loader() {
   remove_managed_bash_welcome_block
   {
     printf '# >>> GhostConsole welcome ghost >>>\n'
+    printf 'if [[ -z "${EDITOR+x}" ]]; then\n'
+    printf '  export EDITOR="nvim"\n'
+    printf 'fi\n'
     printf 'if [[ -r "${HOME}/.config/shell/welcome-ghost.sh" ]]; then\n'
     printf '  source "${HOME}/.config/shell/welcome-ghost.sh"\n'
     printf 'fi\n'
@@ -619,7 +775,7 @@ verify_links() {
 
 print_summary() {
   log_success "bootstrap complete"
-  log_success "installed: ghostty, zsh, git, ncdu, btop, lazygit, lazydocker, Powerlevel10k, zsh-autosuggestions"
+  log_success "installed: ghostty, zsh, git, ncdu, btop, bat, neovim, lnav, lazygit, lazydocker, openapi-tui, markless, navix, Powerlevel10k, zsh-autosuggestions"
   log_success "linked: ~/.config/ghostty ~/.config/zsh ~/.config/shell ~/.config/git ~/.zshrc ~/.gitconfig"
 }
 
@@ -661,7 +817,7 @@ print_completion() {
     '  local -a first_flags uninstall_flags' \
     '  first_flags=(' \
     '    "--install:install Ghostty, zsh, git, TUI tools, zsh plugins, and managed config"' \
-    '    "--update-tui-tools:update ncdu, btop, lazygit, and lazydocker only"' \
+    '    "--update-tui-tools:update ncdu, btop, bat, neovim, lnav, lazygit, lazydocker, openapi-tui, markless, and navix only"' \
     '    "--play-welcome-ghost:play the welcome ghost immediately"' \
     '    "--cursor-cli:install or update Cursor CLI only"' \
     '    "--uninstall:remove GhostConsole-managed items"' \
@@ -763,7 +919,7 @@ print_help() {
     'Options:' \
     '  -h, --help                Show this help message.' \
     '  --install                 Install Ghostty, zsh, git, TUI tools, zsh plugins, and managed config.' \
-    '  --update-tui-tools        Update ncdu, btop, lazygit, and lazydocker only.' \
+    '  --update-tui-tools        Update ncdu, btop, bat, neovim, lnav, lazygit, lazydocker, openapi-tui, markless, and navix only.' \
     '  --play-welcome-ghost      Play the welcome ghost immediately.' \
     '  --cursor-cli              Install Cursor CLI only.' \
     '  --uninstall               Remove GhostConsole-managed links and loaders.' \
