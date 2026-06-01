@@ -90,6 +90,22 @@ test_macos_install_invokes_ghostty_first() {
     calls+=("$1")
   }
 
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
   command() {
     if [[ "$1" == "-v" && "$2" == "brew" ]]; then
       return 0
@@ -99,9 +115,13 @@ test_macos_install_invokes_ghostty_first() {
 
   macos_install
 
-  [[ "${#calls[@]}" == 2 ]] || fail "macos_install should run two install commands"
+  [[ "${#calls[@]}" == 6 ]] || fail "macos_install should run two install commands, bat alias setup, openapi-tui install, mdterm install, and navix install"
   assert_eq 'brew install --cask ghostty' "${calls[0]}" "macos_install should install Ghostty first"
-  assert_eq 'brew install zsh git coreutils ncdu btop lazygit lazydocker' "${calls[1]}" "macos_install should install zsh, git, coreutils, and TUI tools after Ghostty"
+  assert_eq 'brew install zsh git coreutils ncdu btop bat neovim lnav lazygit lazydocker' "${calls[1]}" "macos_install should install zsh, git, coreutils, and TUI tools after Ghostty"
+  assert_eq 'ensure_bat_command' "${calls[2]}" "macos_install should ensure bat command is available"
+  assert_eq 'install_openapi_tui' "${calls[3]}" "macos_install should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[4]}" "macos_install should install mdterm"
+  assert_eq 'install_navix' "${calls[5]}" "macos_install should install navix"
   pass
 }
 
@@ -112,6 +132,22 @@ test_linux_ubuntu_install_uses_ghostty_ubuntu_install_script() {
     calls+=("$1")
   }
 
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
   command() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
       return 1
@@ -124,11 +160,15 @@ test_linux_ubuntu_install_uses_ghostty_ubuntu_install_script() {
 
   linux_ubuntu_install
 
-  assert_eq 4 "${#calls[@]}" "ubuntu flow should install Ghostty, apt packages, lazygit, and lazydocker"
+  assert_eq 8 "${#calls[@]}" "ubuntu flow should install Ghostty, apt packages, bat alias setup, lazygit, lazydocker, openapi-tui, mdterm, and navix"
   assert_eq '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/mkasberg/ghostty-ubuntu/HEAD/install.sh)"' "${calls[0]}" "ubuntu flow should install Ghostty from the documented ghostty-ubuntu script first"
-  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[1]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty"
-  assert_contains "jesseduffield/lazygit" "${calls[2]}" "ubuntu flow should install lazygit from GitHub releases"
-  assert_contains "jesseduffield/lazydocker" "${calls[3]}" "ubuntu flow should install lazydocker from GitHub releases"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop bat neovim lnav' "${calls[1]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty"
+  assert_eq 'ensure_bat_command' "${calls[2]}" "ubuntu flow should ensure bat command is available"
+  assert_contains "jesseduffield/lazygit" "${calls[3]}" "ubuntu flow should install lazygit from GitHub releases"
+  assert_contains "jesseduffield/lazydocker" "${calls[4]}" "ubuntu flow should install lazydocker from GitHub releases"
+  assert_eq 'install_openapi_tui' "${calls[5]}" "ubuntu flow should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[6]}" "ubuntu flow should install mdterm"
+  assert_eq 'install_navix' "${calls[7]}" "ubuntu flow should install navix"
   pass
 }
 
@@ -137,6 +177,22 @@ test_linux_ubuntu_install_skips_ghostty_installer_when_present() {
 
   run_install_command() {
     calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
   }
 
   command() {
@@ -151,10 +207,14 @@ test_linux_ubuntu_install_skips_ghostty_installer_when_present() {
 
   linux_ubuntu_install
 
-  assert_eq 3 "${#calls[@]}" "ubuntu flow should install apt packages, lazygit, and lazydocker when Ghostty is already installed"
-  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[0]}" "ubuntu flow should not rerun the upstream Ghostty installer when ghostty is already available"
-  assert_contains "jesseduffield/lazygit" "${calls[1]}" "ubuntu flow should still install lazygit when Ghostty is already installed"
-  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "ubuntu flow should still install lazydocker when Ghostty is already installed"
+  assert_eq 7 "${#calls[@]}" "ubuntu flow should install apt packages, bat alias setup, lazygit, lazydocker, openapi-tui, mdterm, and navix when Ghostty is already installed"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop bat neovim lnav' "${calls[0]}" "ubuntu flow should not rerun the upstream Ghostty installer when ghostty is already available"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "ubuntu flow should ensure bat command is available when Ghostty is already installed"
+  assert_contains "jesseduffield/lazygit" "${calls[2]}" "ubuntu flow should still install lazygit when Ghostty is already installed"
+  assert_contains "jesseduffield/lazydocker" "${calls[3]}" "ubuntu flow should still install lazydocker when Ghostty is already installed"
+  assert_eq 'install_openapi_tui' "${calls[4]}" "ubuntu flow should still install openapi-tui when Ghostty is already installed"
+  assert_eq 'install_mdterm' "${calls[5]}" "ubuntu flow should still install mdterm when Ghostty is already installed"
+  assert_eq 'install_navix' "${calls[6]}" "ubuntu flow should still install navix when Ghostty is already installed"
   pass
 }
 
@@ -194,6 +254,22 @@ test_linux_ubuntu_install_falls_back_when_ghostty_installer_fails() {
     return 0
   }
 
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
   command() {
     if [[ "$1" == "-v" && "$2" == "ghostty" ]]; then
       return 1
@@ -206,12 +282,16 @@ test_linux_ubuntu_install_falls_back_when_ghostty_installer_fails() {
 
   linux_ubuntu_install
 
-  assert_eq 5 "${#calls[@]}" "ubuntu flow should try upstream installer, fallback installer, apt packages, lazygit, and lazydocker"
+  assert_eq 9 "${#calls[@]}" "ubuntu flow should try upstream installer, fallback installer, apt packages, bat alias setup, lazygit, lazydocker, openapi-tui, mdterm, and navix"
   assert_contains "raw.githubusercontent.com/mkasberg/ghostty-ubuntu" "${calls[0]}" "ubuntu flow should try the documented Ghostty installer first"
   assert_contains "github.com/mkasberg/ghostty-ubuntu/releases/latest" "${calls[1]}" "ubuntu fallback should avoid the GitHub API release lookup"
-  assert_eq 'sudo apt-get install -y zsh git ncdu btop' "${calls[2]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty fallback"
-  assert_contains "jesseduffield/lazygit" "${calls[3]}" "ubuntu flow should install lazygit after Ghostty fallback"
-  assert_contains "jesseduffield/lazydocker" "${calls[4]}" "ubuntu flow should install lazydocker after Ghostty fallback"
+  assert_eq 'sudo apt-get install -y zsh git ncdu btop bat neovim lnav' "${calls[2]}" "ubuntu flow should install zsh, git, and apt-packaged TUI tools after Ghostty fallback"
+  assert_eq 'ensure_bat_command' "${calls[3]}" "ubuntu flow should ensure bat command is available after Ghostty fallback"
+  assert_contains "jesseduffield/lazygit" "${calls[4]}" "ubuntu flow should install lazygit after Ghostty fallback"
+  assert_contains "jesseduffield/lazydocker" "${calls[5]}" "ubuntu flow should install lazydocker after Ghostty fallback"
+  assert_eq 'install_openapi_tui' "${calls[6]}" "ubuntu flow should install openapi-tui after Ghostty fallback"
+  assert_eq 'install_mdterm' "${calls[7]}" "ubuntu flow should install mdterm after Ghostty fallback"
+  assert_eq 'install_navix' "${calls[8]}" "ubuntu flow should install navix after Ghostty fallback"
   pass
 }
 
@@ -286,6 +366,22 @@ test_install_tui_tools_ubuntu_installs_only_tui_tools() {
     calls+=("$1")
   }
 
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
   command() {
     if [[ "$1" == "-v" ]]; then
       return 1
@@ -299,10 +395,14 @@ test_install_tui_tools_ubuntu_installs_only_tui_tools() {
 
   install_tui_tools
 
-  assert_eq 3 "${#calls[@]}" "ubuntu TUI installer should run apt plus lazygit and lazydocker installs"
-  assert_eq 'sudo apt-get install -y ncdu btop' "${calls[0]}" "standalone Ubuntu TUI installer should not install ghostty, zsh, or git"
-  assert_contains "jesseduffield/lazygit" "${calls[1]}" "standalone Ubuntu TUI installer should install lazygit"
-  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "standalone Ubuntu TUI installer should install lazydocker"
+  assert_eq 7 "${#calls[@]}" "ubuntu TUI installer should run apt, bat alias setup, lazygit, lazydocker, openapi-tui, mdterm, and navix installs"
+  assert_eq 'sudo apt-get install -y ncdu btop bat neovim lnav' "${calls[0]}" "standalone Ubuntu TUI installer should not install ghostty or zsh/git"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "standalone Ubuntu TUI installer should ensure bat command is available"
+  assert_contains "jesseduffield/lazygit" "${calls[2]}" "standalone Ubuntu TUI installer should install lazygit"
+  assert_contains "jesseduffield/lazydocker" "${calls[3]}" "standalone Ubuntu TUI installer should install lazydocker"
+  assert_eq 'install_openapi_tui' "${calls[4]}" "standalone Ubuntu TUI installer should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[5]}" "standalone Ubuntu TUI installer should install mdterm"
+  assert_eq 'install_navix' "${calls[6]}" "standalone Ubuntu TUI installer should install navix"
   pass
 }
 
@@ -311,6 +411,22 @@ test_update_tui_tools_ubuntu_updates_tui_tools() {
 
   run_install_command() {
     calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
   }
 
   command() {
@@ -326,10 +442,349 @@ test_update_tui_tools_ubuntu_updates_tui_tools() {
 
   update_tui_tools
 
-  assert_eq 3 "${#calls[@]}" "ubuntu TUI updater should update apt packages plus GitHub release tools"
-  assert_eq 'sudo apt-get update && sudo apt-get install -y ncdu btop' "${calls[0]}" "Ubuntu TUI updater should refresh apt metadata and update apt-packaged tools"
-  assert_contains "jesseduffield/lazygit" "${calls[1]}" "Ubuntu TUI updater should update lazygit from GitHub releases"
-  assert_contains "jesseduffield/lazydocker" "${calls[2]}" "Ubuntu TUI updater should update lazydocker from GitHub releases"
+  assert_eq 7 "${#calls[@]}" "ubuntu TUI updater should update apt packages, bat alias setup, GitHub release tools, openapi-tui, mdterm, and navix"
+  assert_eq 'sudo apt-get update && sudo apt-get install -y ncdu btop bat neovim lnav' "${calls[0]}" "Ubuntu TUI updater should refresh apt metadata and update apt-packaged tools"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "Ubuntu TUI updater should ensure bat command is available"
+  assert_contains "jesseduffield/lazygit" "${calls[2]}" "Ubuntu TUI updater should update lazygit from GitHub releases"
+  assert_contains "jesseduffield/lazydocker" "${calls[3]}" "Ubuntu TUI updater should update lazydocker from GitHub releases"
+  assert_eq 'install_openapi_tui force' "${calls[4]}" "Ubuntu TUI updater should force-update openapi-tui"
+  assert_eq 'install_mdterm force' "${calls[5]}" "Ubuntu TUI updater should force-update mdterm"
+  assert_eq 'install_navix force' "${calls[6]}" "Ubuntu TUI updater should force-update navix"
+  pass
+}
+
+test_install_tui_tools_macos_installs_only_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "brew" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  uname() {
+    printf 'Darwin\n'
+  }
+
+  install_tui_tools
+
+  assert_eq 5 "${#calls[@]}" "macOS TUI installer should run brew install, bat alias setup, openapi-tui install, mdterm install, and navix install"
+  assert_eq 'brew install ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "standalone macOS TUI installer should install TUI tools plus neovim"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "standalone macOS TUI installer should ensure bat command is available"
+  assert_eq 'install_openapi_tui' "${calls[2]}" "standalone macOS TUI installer should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[3]}" "standalone macOS TUI installer should install mdterm"
+  assert_eq 'install_navix' "${calls[4]}" "standalone macOS TUI installer should install navix"
+  pass
+}
+
+test_update_tui_tools_macos_updates_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  command() {
+    if [[ "$1" == "-v" && "$2" == "brew" ]]; then
+      return 0
+    fi
+    builtin command "$@"
+  }
+
+  uname() {
+    printf 'Darwin\n'
+  }
+
+  update_tui_tools
+
+  assert_eq 5 "${#calls[@]}" "macOS TUI updater should run brew update/upgrade, bat alias setup, openapi-tui force update, mdterm force update, and navix force update"
+  assert_eq 'brew update && brew upgrade ncdu btop bat neovim lnav lazygit lazydocker || brew install ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "macOS TUI updater should refresh and update brew-managed tools"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "macOS TUI updater should ensure bat command is available"
+  assert_eq 'install_openapi_tui force' "${calls[2]}" "macOS TUI updater should force-update openapi-tui"
+  assert_eq 'install_mdterm force' "${calls[3]}" "macOS TUI updater should force-update mdterm"
+  assert_eq 'install_navix force' "${calls[4]}" "macOS TUI updater should force-update navix"
+  pass
+}
+
+test_ensure_bat_command_skips_when_bat_exists() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "SHOULD_NOT_RUN\n"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "bat" ]]; then
+        return 0
+      fi
+      if [[ "$1" == "-v" && "$2" == "batcat" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    ensure_bat_command
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_not_contains "SHOULD_NOT_RUN" "${output}" "bat alias helper should no-op when bat already exists"
+  pass
+}
+
+test_ensure_bat_command_links_batcat_when_bat_is_missing() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "bat" ]]; then
+        return 1
+      fi
+      if [[ "$1" == "-v" && "$2" == "batcat" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    ensure_bat_command
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains 'sudo ln -sfn "$(command -v batcat)" /usr/local/bin/bat' "${output}" "bat alias helper should link /usr/local/bin/bat to batcat"
+  pass
+}
+
+test_ensure_bat_command_warns_when_batcat_missing() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "SHOULD_NOT_RUN\n"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "bat" ]]; then
+        return 1
+      fi
+      if [[ "$1" == "-v" && "$2" == "batcat" ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    ensure_bat_command
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "batcat not found; skipping bat alias setup." "${output}" "bat alias helper should explain when batcat is unavailable"
+  assert_not_contains "SHOULD_NOT_RUN" "${output}" "bat alias helper should not run install commands when batcat is unavailable"
+  pass
+}
+
+test_install_openapi_tui_installs_from_github_release_when_missing() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "openapi-tui" ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    install_openapi_tui
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/zaghaghi/openapi-tui/releases/latest" "${output}" "openapi-tui install should resolve latest release tag"
+  assert_contains 'archive="openapi-tui-${version}-${os}-${arch}.tar.gz"' "${output}" "openapi-tui install should select archive by os and arch"
+  assert_contains 'sudo install -m 0755 openapi-tui /usr/local/bin/openapi-tui' "${output}" "openapi-tui install should place binary into /usr/local/bin"
+  pass
+}
+
+test_install_openapi_tui_skips_existing_binary() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "SHOULD_NOT_RUN\n"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "openapi-tui" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_openapi_tui
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_not_contains "SHOULD_NOT_RUN" "${output}" "openapi-tui install should skip when binary already exists"
+  pass
+}
+
+test_install_openapi_tui_force_installs_even_if_present() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "openapi-tui" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_openapi_tui force
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/zaghaghi/openapi-tui/releases/latest" "${output}" "forced openapi-tui install should still fetch latest release"
+  pass
+}
+
+test_install_mdterm_installs_from_github_release_when_missing() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "markless" ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    install_mdterm
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/jvanderberg/markless/releases/latest" "${output}" "mdterm install should resolve latest release tag"
+  assert_contains 'archive="markless-${arch}-${os}.tar.gz"' "${output}" "mdterm install should select archive by arch and os"
+  assert_contains 'sudo install -m 0755 markless /usr/local/bin/markless' "${output}" "mdterm install should place binary into /usr/local/bin"
+  pass
+}
+
+test_install_mdterm_skips_existing_binary() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "SHOULD_NOT_RUN\n"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "markless" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_mdterm
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_not_contains "SHOULD_NOT_RUN" "${output}" "mdterm install should skip when binary already exists"
+  pass
+}
+
+test_install_mdterm_force_installs_even_if_present() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "markless" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_mdterm force
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/jvanderberg/markless/releases/latest" "${output}" "forced mdterm install should still fetch latest release"
+  pass
+}
+
+test_install_navix_installs_from_github_release_when_missing() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "navix" ]]; then
+        return 1
+      fi
+      builtin command "$@"
+    }
+    install_navix
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/PeterBuchHansen/navix/releases/latest" "${output}" "navix install should resolve latest release tag"
+  assert_contains 'archive="navix-${tag}-${target}.tar.gz"' "${output}" "navix install should select archive by release tag and target"
+  assert_contains 'target="${arch}-${os}"' "${output}" "navix install should build a target triple from architecture and os"
+  assert_contains 'sudo install -m 0755 navix /usr/local/bin/navix' "${output}" "navix install should place binary into /usr/local/bin"
+  pass
+}
+
+test_install_navix_skips_existing_binary() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "SHOULD_NOT_RUN\n"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "navix" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_navix
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_not_contains "SHOULD_NOT_RUN" "${output}" "navix install should skip when binary already exists"
+  pass
+}
+
+test_install_navix_force_installs_even_if_present() {
+  local output
+
+  output="$(bash -c '
+    source "$1"
+    run_install_command() { printf "%s\n" "$1"; }
+    command() {
+      if [[ "$1" == "-v" && "$2" == "navix" ]]; then
+        return 0
+      fi
+      builtin command "$@"
+    }
+    install_navix force
+  ' _ "${REPO_ROOT}/bootstrap.sh")"
+
+  assert_contains "https://github.com/PeterBuchHansen/navix/releases/latest" "${output}" "forced navix install should still fetch latest release"
   pass
 }
 
@@ -579,94 +1034,6 @@ test_install_zsh_autosuggestions_updates_existing_checkout() {
 
   assert_eq "git -C \"${plugin_path}\" pull --ff-only" "${calls[0]}" "zsh-autosuggestions should update an existing checkout"
   GHOSTCONSOLE_ROOT="${REPO_ROOT}"
-  pass
-}
-
-test_zsh_config_sources_powerlevel10k() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains 'plugins/powerlevel10k/powerlevel10k.zsh-theme' "${config}" "zsh config should source Powerlevel10k"
-  pass
-}
-
-test_zsh_config_sources_repo_powerlevel10k_config() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  [[ -f "${REPO_ROOT}/.config/zsh/.p10k.zsh" ]] || fail "Powerlevel10k config should live in repo zsh config"
-  assert_contains 'source "${GHOSTCONSOLE_HOME}/.p10k.zsh"' "${config}" "zsh config should source repo Powerlevel10k config"
-  pass
-}
-
-test_zsh_config_sources_zsh_autosuggestions() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains 'plugins/zsh-autosuggestions/zsh-autosuggestions.zsh' "${config}" "zsh config should source zsh-autosuggestions"
-  pass
-}
-
-test_powerlevel10k_config_uses_repo_config() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.p10k.zsh")"
-
-  assert_contains "Generated by Powerlevel10k configuration wizard" "${config}" "Powerlevel10k config should be the generated repo config"
-  assert_contains "typeset -g POWERLEVEL9K_MULTILINE_FIRST_PROMPT_GAP_CHAR=' '" "${config}" "Powerlevel10k config should avoid a full-width prompt gap on resize"
-  pass
-}
-
-test_ghostty_config_sets_large_initial_window() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/ghostty/config")"
-
-  assert_contains 'font-size = 14' "${config}" "Ghostty config should set the font size with a valid key"
-  assert_not_contains 'Aafont-size' "${config}" "Ghostty config should not contain a misspelled font-size key"
-  assert_contains 'window-width = 999' "${config}" "Ghostty config should use an oversized width because Linux startup maximize can be ignored"
-  assert_contains 'window-height = 999' "${config}" "Ghostty config should use an oversized height because Linux startup maximize can be ignored"
-  pass
-}
-
-test_zsh_config_adds_local_bin_for_cursor_cli() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains 'export PATH="${HOME}/.local/bin:${PATH}"' "${config}" "zsh config should include ~/.local/bin for Cursor CLI"
-  assert_not_contains '${HOME}/bin' "${config}" "zsh config should not include unused ~/bin path"
-  pass
-}
-
-test_zsh_config_adds_repo_completions_to_fpath() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains 'fpath=("${HOME}/.config/shell/completions" ${fpath})' "${config}" "zsh config should include shared shell completions in fpath"
-  assert_not_contains 'fpath=("${GHOSTCONSOLE_HOME}/completions" ${fpath})' "${config}" "zsh config should not use zsh-specific completion directory"
-  pass
-}
-
-test_zsh_config_enables_autocd_for_parent_directory_navigation() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains "setopt AUTO_CD" "${config}" "zsh config should enable autocd so bare .. completion is treated as a directory path in command position"
-  pass
-}
-
-test_zsh_config_sources_welcome_ghost() {
-  local config
-
-  config="$(< "${REPO_ROOT}/.config/zsh/.zshrc")"
-
-  assert_contains 'source "${HOME}/.config/shell/welcome-ghost.sh"' "${config}" "zsh config should source shared welcome ghost"
   pass
 }
 
@@ -1506,8 +1873,22 @@ test_apply_repo_config_adds_bash_welcome_loader() {
   ghostconsole_test_apply_repo_config_in_home "${workdir}" "20260424-120000"
 
   assert_contains '# >>> GhostConsole welcome ghost >>>' "$(< "${workdir}/.bashrc")" "bootstrap should add managed bash welcome block"
+  assert_contains 'if [[ -z "${EDITOR+x}" ]]; then' "$(< "${workdir}/.bashrc")" "bash welcome block should set EDITOR only when it is unset"
+  assert_contains '  export EDITOR="nvim"' "$(< "${workdir}/.bashrc")" "bash welcome block should default EDITOR to nvim"
   assert_contains 'source "${HOME}/.config/shell/welcome-ghost.sh"' "$(< "${workdir}/.bashrc")" "bash welcome block should source home shell config"
   assert_contains '# existing bashrc' "$(< "${workdir}/.bashrc")" "bash welcome block should preserve existing bashrc contents"
+  pass
+}
+
+test_zsh_config_defaults_editor_to_nvim_when_unset() {
+  local zshrc_contents
+
+  zshrc_contents="$(
+    < "${REPO_ROOT}/.config/zsh/.zshrc"
+  )"
+
+  assert_contains 'if [[ -z "${EDITOR+x}" ]]; then' "${zshrc_contents}" "managed zsh config should set EDITOR only when unset"
+  assert_contains '  export EDITOR="nvim"' "${zshrc_contents}" "managed zsh config should default EDITOR to nvim"
   pass
 }
 
@@ -1676,7 +2057,7 @@ test_print_summary_reports_installed_tools_and_linked_targets() {
   output="$(print_summary)"
 
   assert_contains "[GhostConsole-Installer] bootstrap complete" "${output}" "print_summary should report completion"
-  assert_contains "[GhostConsole-Installer] installed: ghostty, zsh, git, ncdu, btop, lazygit, lazydocker, Powerlevel10k, zsh-autosuggestions" "${output}" "print_summary should list installed tools"
+  assert_contains "[GhostConsole-Installer] installed: ghostty, zsh, git, ncdu, btop, bat, neovim, lnav, lazygit, lazydocker, openapi-tui, markless, navix, Powerlevel10k, zsh-autosuggestions" "${output}" "print_summary should list installed tools"
   assert_contains "[GhostConsole-Installer] linked: ~/.config/ghostty ~/.config/zsh ~/.config/shell ~/.config/git ~/.zshrc ~/.gitconfig" "${output}" "print_summary should list linked targets"
   pass
 }
@@ -1692,7 +2073,13 @@ test_print_help_lists_supported_commands() {
   assert_contains "-h, --help" "${output}" "help should list help flags"
   assert_not_contains "--completion-source" "${output}" "help should not expose internal completion source mode"
   assert_contains "--update-tui-tools" "${output}" "help should list TUI tool update"
-  assert_not_contains "--tui-tools" "${output}" "help should not list old TUI-only install flag"
+  assert_contains "bat" "${output}" "help should mention bat in TUI update scope"
+  assert_contains "neovim" "${output}" "help should mention neovim in TUI update scope"
+  assert_contains "lnav" "${output}" "help should mention lnav in TUI update scope"
+  assert_contains "openapi-tui" "${output}" "help should mention openapi-tui in TUI update scope"
+  assert_contains "markless" "${output}" "help should mention markless in TUI update scope"
+  assert_contains "navix" "${output}" "help should mention navix in TUI update scope"
+  assert_not_contains "--uninstall --tui-tools" "${output}" "help should not list TUI-only uninstall"
   assert_contains "--play-welcome-ghost" "${output}" "help should list manual welcome ghost playback"
   assert_contains "--cursor-cli" "${output}" "help should list Cursor CLI install"
   assert_contains "--uninstall" "${output}" "help should list uninstall"
@@ -1708,7 +2095,13 @@ test_print_completion_lists_supported_flags() {
 
   assert_contains "--install" "${output}" "completion should include full install"
   assert_contains "--update-tui-tools" "${output}" "completion should include TUI tool update"
-  assert_not_contains "--tui-tools" "${output}" "completion should not include old TUI-only install flag"
+  assert_contains "bat" "${output}" "completion should mention bat in TUI update scope"
+  assert_contains "neovim" "${output}" "completion should mention neovim in TUI update scope"
+  assert_contains "lnav" "${output}" "completion should mention lnav in TUI update scope"
+  assert_contains "openapi-tui" "${output}" "completion should mention openapi-tui in TUI update scope"
+  assert_contains "markless" "${output}" "completion should mention markless in TUI update scope"
+  assert_contains "navix" "${output}" "completion should mention navix in TUI update scope"
+  assert_not_contains "--tui-tools" "${output}" "completion should not include TUI-only uninstall flag"
   assert_contains "--play-welcome-ghost" "${output}" "completion should include manual welcome ghost playback"
   assert_contains "--cursor-cli" "${output}" "completion should include Cursor CLI"
   assert_contains "--uninstall" "${output}" "completion should include uninstall"
@@ -2032,6 +2425,20 @@ test_install_ubuntu_github_release_tool_skips_existing_binary
 test_install_ubuntu_github_release_tool_forces_existing_binary_when_requested
 test_install_tui_tools_ubuntu_installs_only_tui_tools
 test_update_tui_tools_ubuntu_updates_tui_tools
+test_install_tui_tools_macos_installs_only_tui_tools
+test_update_tui_tools_macos_updates_tui_tools
+test_ensure_bat_command_skips_when_bat_exists
+test_ensure_bat_command_links_batcat_when_bat_is_missing
+test_ensure_bat_command_warns_when_batcat_missing
+test_install_openapi_tui_installs_from_github_release_when_missing
+test_install_openapi_tui_skips_existing_binary
+test_install_openapi_tui_force_installs_even_if_present
+test_install_mdterm_installs_from_github_release_when_missing
+test_install_mdterm_skips_existing_binary
+test_install_mdterm_force_installs_even_if_present
+test_install_navix_installs_from_github_release_when_missing
+test_install_navix_skips_existing_binary
+test_install_navix_force_installs_even_if_present
 test_install_cursor_cli_runs_official_installer_when_missing
 test_install_cursor_cli_updates_when_agent_exists
 test_uninstall_cursor_cli_removes_local_agent_only
@@ -2044,15 +2451,6 @@ test_install_powerlevel10k_reports_git_config_help_on_update_failure
 test_install_powerlevel10k_reports_permission_fix_on_update_failure
 test_install_zsh_autosuggestions_clones_when_missing
 test_install_zsh_autosuggestions_updates_existing_checkout
-test_zsh_config_sources_powerlevel10k
-test_zsh_config_sources_repo_powerlevel10k_config
-test_zsh_config_sources_zsh_autosuggestions
-test_powerlevel10k_config_uses_repo_config
-test_ghostty_config_sets_large_initial_window
-test_zsh_config_adds_local_bin_for_cursor_cli
-test_zsh_config_adds_repo_completions_to_fpath
-test_zsh_config_enables_autocd_for_parent_directory_navigation
-test_zsh_config_sources_welcome_ghost
 test_welcome_ghost_prints_only_in_interactive_ghostty_shell
 test_welcome_ghost_runs_once_per_boot_marker
 test_welcome_ghost_does_not_define_reset_alias
@@ -2095,6 +2493,7 @@ test_apply_repo_config_backs_up_conflicting_dotconfig_ghostty
 test_apply_repo_config_writes_home_loaders_with_backup
 test_apply_repo_config_accepts_existing_managed_home_loaders
 test_apply_repo_config_adds_bash_welcome_loader
+test_zsh_config_defaults_editor_to_nvim_when_unset
 test_apply_repo_config_keeps_bash_welcome_loader_idempotent
 test_apply_repo_config_backs_up_zshrc_symlink_before_rewrite
 test_uninstall_config_removes_only_managed_links_and_loaders
