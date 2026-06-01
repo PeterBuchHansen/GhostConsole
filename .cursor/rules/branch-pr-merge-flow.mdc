@@ -1,0 +1,33 @@
+---
+description: Branch naming convention and PR merge workflow for GhostConsole
+alwaysApply: true
+---
+
+# GhostConsole Branch And PR Flow
+
+## Branch Naming
+
+- Use: `main_#<issue-number>_<owner>_<short-topic>`
+- Keep `<short-topic>` readable and hyphen-separated.
+- Example: `main_#2_peha_Expanding-on-GhostConsoles-TUI-pack`
+
+## Commit Flow
+
+- Stage only files related to the task.
+- Commit message should explain intent and impact, not just file names.
+- Prefer one focused commit per issue-sized change.
+
+## PR And Merge Flow
+
+1. Push branch with upstream: `git push -u origin <branch>`.
+2. Open PR that references the related issue and includes:
+   - Summary of behavior changes
+   - Test evidence (commands + outcomes)
+3. If checks are required, enable auto-merge and wait for CI to pass.
+4. Merge PR and delete the branch on merge.
+5. Remove local branch after merge: `git branch -d <branch>`.
+
+## Guardrails
+
+- Do not merge with failing checks.
+- Do not include unrelated modified files in PRs.

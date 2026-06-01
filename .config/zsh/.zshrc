@@ -1,5 +1,8 @@
 export GHOSTCONSOLE_HOME="${HOME}/.config/zsh"
 export PATH="${HOME}/.local/bin:${PATH}"
+if [[ -z "${EDITOR+x}" ]]; then
+  export EDITOR="nvim"
+fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   for coreutils_gnubin in /opt/homebrew/opt/coreutils/libexec/gnubin /usr/local/opt/coreutils/libexec/gnubin; do
