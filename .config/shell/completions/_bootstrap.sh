@@ -4,7 +4,7 @@ _bootstrap_sh() {
   local -a first_flags uninstall_flags
   first_flags=(
     "--install:install Ghostty, zsh, git, TUI tools, zsh plugins, and managed config"
-    "--update-tui-tools:update ncdu, btop, lazygit, and lazydocker only"
+    "--update-tui-tools:update ncdu, btop, bat, neovim, lnav, lazygit, lazydocker, openapi-tui, markless, and navix only"
     "--play-welcome-ghost:play the welcome ghost immediately"
     "--cursor-cli:install or update Cursor CLI only"
     "--uninstall:remove GhostConsole-managed items"
