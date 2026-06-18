@@ -61,3 +61,33 @@ _ghostconsole_parent_dir_tab() {
 zle -N _ghostconsole_parent_dir_tab
 bindkey -M emacs '^I' _ghostconsole_parent_dir_tab
 bindkey -M viins '^I' _ghostconsole_parent_dir_tab
+
+# Word-wise navigation and editing.
+# Ghostty emits xterm CSI sequences (e.g. \e[1;5C for Ctrl+Right); without a
+# binding the escape leaks into the buffer as literal characters (e.g. `;5C`).
+# Modifier codes: ;3 = Alt, ;5 = Ctrl. Extra sequences cover tmux/screen and
+# alternate terminal encodings so the keys behave the same everywhere.
+for _gc_keymap in emacs viins; do
+  # Move forward one word: Ctrl+Right, Alt+Right, Esc-f
+  bindkey -M "${_gc_keymap}" '^[[1;5C' forward-word
+  bindkey -M "${_gc_keymap}" '^[[1;3C' forward-word
+  bindkey -M "${_gc_keymap}" '^[[5C'   forward-word
+  bindkey -M "${_gc_keymap}" '^[Oc'    forward-word
+  bindkey -M "${_gc_keymap}" '^[f'     forward-word
+
+  # Move backward one word: Ctrl+Left, Alt+Left, Esc-b
+  bindkey -M "${_gc_keymap}" '^[[1;5D' backward-word
+  bindkey -M "${_gc_keymap}" '^[[1;3D' backward-word
+  bindkey -M "${_gc_keymap}" '^[[5D'   backward-word
+  bindkey -M "${_gc_keymap}" '^[Od'    backward-word
+  bindkey -M "${_gc_keymap}" '^[b'     backward-word
+
+  # Delete previous word: Ctrl+Backspace, Alt+Backspace
+  bindkey -M "${_gc_keymap}" '^H'      backward-kill-word
+  bindkey -M "${_gc_keymap}" '^[^?'    backward-kill-word
+
+  # Delete next word: Alt+Delete, Esc-d
+  bindkey -M "${_gc_keymap}" '^[[3;3~' kill-word
+  bindkey -M "${_gc_keymap}" '^[d'     kill-word
+done
+unset _gc_keymap
