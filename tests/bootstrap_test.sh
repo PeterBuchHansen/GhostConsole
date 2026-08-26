@@ -393,7 +393,14 @@ test_install_tui_tools_ubuntu_installs_only_tui_tools() {
     printf 'Linux\n'
   }
 
+  .() {
+    [[ "$1" == /etc/os-release ]] || return 1
+    ID=ubuntu
+  }
+
   install_tui_tools
+
+  unset -f .
 
   assert_eq 7 "${#calls[@]}" "ubuntu TUI installer should run apt, bat alias setup, lazygit, lazydocker, openapi-tui, mdterm, and navix installs"
   assert_eq 'sudo apt-get install -y ncdu btop bat neovim lnav' "${calls[0]}" "standalone Ubuntu TUI installer should not install ghostty or zsh/git"
@@ -403,6 +410,51 @@ test_install_tui_tools_ubuntu_installs_only_tui_tools() {
   assert_eq 'install_openapi_tui' "${calls[4]}" "standalone Ubuntu TUI installer should install openapi-tui"
   assert_eq 'install_mdterm' "${calls[5]}" "standalone Ubuntu TUI installer should install mdterm"
   assert_eq 'install_navix' "${calls[6]}" "standalone Ubuntu TUI installer should install navix"
+  pass
+}
+
+test_install_tui_tools_omarchy_installs_only_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  uname() {
+    printf 'Linux\n'
+  }
+
+  .() {
+    [[ "$1" == /etc/os-release ]] || return 1
+    ID=omarchy
+  }
+
+  install_tui_tools
+
+  unset -f .
+
+  assert_eq 5 "${#calls[@]}" "omarchy TUI installer should run pacman, bat alias setup, openapi-tui, mdterm, and navix installs"
+  assert_eq 'sudo pacman -S --needed --noconfirm ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "standalone Omarchy TUI installer should not install ghostty or zsh/git"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "standalone Omarchy TUI installer should ensure bat command is available"
+  assert_eq 'install_openapi_tui' "${calls[2]}" "standalone Omarchy TUI installer should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[3]}" "standalone Omarchy TUI installer should install mdterm"
+  assert_eq 'install_navix' "${calls[4]}" "standalone Omarchy TUI installer should install navix"
   pass
 }
 
@@ -440,7 +492,14 @@ test_update_tui_tools_ubuntu_updates_tui_tools() {
     printf 'Linux\n'
   }
 
+  .() {
+    [[ "$1" == /etc/os-release ]] || return 1
+    ID=ubuntu
+  }
+
   update_tui_tools
+
+  unset -f .
 
   assert_eq 7 "${#calls[@]}" "ubuntu TUI updater should update apt packages, bat alias setup, GitHub release tools, openapi-tui, mdterm, and navix"
   assert_eq 'sudo apt-get update && sudo apt-get install -y ncdu btop bat neovim lnav' "${calls[0]}" "Ubuntu TUI updater should refresh apt metadata and update apt-packaged tools"
@@ -1195,7 +1254,7 @@ test_main_rejects_linux_non_ubuntu_before_install() {
   fi
 
   assert_contains "[GhostConsole-Installer] error:" "${output}" "non-Ubuntu Linux should surface a script error"
-  assert_contains 'Linux bootstrap supports only Ubuntu' "${output}" "non-Ubuntu Linux should explain supported distros"
+  assert_contains 'Linux bootstrap supports only Ubuntu and Arch/Omarchy' "${output}" "non-Ubuntu Linux should explain supported distros"
   assert_not_contains "SHOULD_NOT_EXEC" "${output}" "install hooks should never run before distro check"
   pass
 }
@@ -1223,6 +1282,135 @@ test_main_reads_linux_id_from_os_release() {
 
   assert_contains "UBUNTU_INSTALL" "${output}" "Ubuntu from os-release should select Ubuntu install"
   assert_not_contains "SHOULD_NOT_EXEC" "${output}" "macOS install hook should not run on Linux"
+  pass
+}
+
+test_main_reads_omarchy_id_from_os_release() {
+  local output
+
+  if ! output="$(bash -c '
+    source "$1"
+    macos_install() { printf SHOULD_NOT_EXEC_MACOS >&2; exit 99; }
+    linux_ubuntu_install() { printf SHOULD_NOT_EXEC_U >&2; exit 98; }
+    linux_arch_install() { printf ARCH_INSTALL; }
+    apply_repo_config() { :; }
+    verify_installation() { :; }
+    verify_links() { :; }
+    print_summary() { :; }
+    uname() { printf "%s\n" Linux; }
+    .() {
+      [[ "$1" == /etc/os-release ]] || return 1
+      ID=omarchy
+    }
+    main --install
+  ' _ "${REPO_ROOT}/bootstrap.sh" 2>&1)"; then
+    fail "Omarchy id should route to the Arch install: ${output}"
+  fi
+
+  assert_contains "ARCH_INSTALL" "${output}" "Omarchy from os-release should select the Arch install"
+  assert_not_contains "SHOULD_NOT_EXEC" "${output}" "macOS and Ubuntu install hooks should not run for Omarchy"
+  pass
+}
+
+test_linux_arch_install_installs_packages_via_pacman() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  linux_arch_install
+
+  assert_eq 5 "${#calls[@]}" "arch flow should run pacman install, bat alias setup, openapi-tui, mdterm, and navix installs"
+  assert_eq 'sudo pacman -S --needed --noconfirm ghostty zsh git ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "arch flow should install Ghostty, zsh, git, and TUI tools via pacman"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "arch flow should ensure bat command is available"
+  assert_eq 'install_openapi_tui' "${calls[2]}" "arch flow should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[3]}" "arch flow should install mdterm"
+  assert_eq 'install_navix' "${calls[4]}" "arch flow should install navix"
+  pass
+}
+
+test_linux_arch_tui_tools_install_installs_only_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  linux_arch_tui_tools_install
+
+  assert_eq 5 "${#calls[@]}" "arch TUI installer should run pacman install, bat alias setup, openapi-tui, mdterm, and navix installs"
+  assert_eq 'sudo pacman -S --needed --noconfirm ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "arch TUI installer should not install ghostty or zsh/git"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "arch TUI installer should ensure bat command is available"
+  assert_eq 'install_openapi_tui' "${calls[2]}" "arch TUI installer should install openapi-tui"
+  assert_eq 'install_mdterm' "${calls[3]}" "arch TUI installer should install mdterm"
+  assert_eq 'install_navix' "${calls[4]}" "arch TUI installer should install navix"
+  pass
+}
+
+test_linux_arch_tui_tools_update_updates_tui_tools() {
+  local -a calls=()
+
+  run_install_command() {
+    calls+=("$1")
+  }
+
+  install_openapi_tui() {
+    calls+=("install_openapi_tui${1:+ ${1}}")
+  }
+
+  install_mdterm() {
+    calls+=("install_mdterm${1:+ ${1}}")
+  }
+
+  install_navix() {
+    calls+=("install_navix${1:+ ${1}}")
+  }
+
+  ensure_bat_command() {
+    calls+=("ensure_bat_command")
+  }
+
+  linux_arch_tui_tools_update
+
+  assert_eq 5 "${#calls[@]}" "arch TUI updater should run pacman update, bat alias setup, and force-updated openapi-tui, mdterm, and navix"
+  assert_eq 'sudo pacman -Syu --needed --noconfirm ncdu btop bat neovim lnav lazygit lazydocker' "${calls[0]}" "arch TUI updater should refresh and upgrade pacman-managed tools"
+  assert_eq 'ensure_bat_command' "${calls[1]}" "arch TUI updater should ensure bat command is available"
+  assert_eq 'install_openapi_tui force' "${calls[2]}" "arch TUI updater should force-update openapi-tui"
+  assert_eq 'install_mdterm force' "${calls[3]}" "arch TUI updater should force-update mdterm"
+  assert_eq 'install_navix force' "${calls[4]}" "arch TUI updater should force-update navix"
   pass
 }
 
@@ -2424,6 +2612,7 @@ test_install_ubuntu_github_release_tool_installs_missing_binary
 test_install_ubuntu_github_release_tool_skips_existing_binary
 test_install_ubuntu_github_release_tool_forces_existing_binary_when_requested
 test_install_tui_tools_ubuntu_installs_only_tui_tools
+test_install_tui_tools_omarchy_installs_only_tui_tools
 test_update_tui_tools_ubuntu_updates_tui_tools
 test_install_tui_tools_macos_installs_only_tui_tools
 test_update_tui_tools_macos_updates_tui_tools
@@ -2459,6 +2648,10 @@ test_main_play_welcome_ghost_ignores_boot_marker
 test_main_play_welcome_ghost_reports_playback_failure
 test_main_rejects_linux_non_ubuntu_before_install
 test_main_reads_linux_id_from_os_release
+test_main_reads_omarchy_id_from_os_release
+test_linux_arch_install_installs_packages_via_pacman
+test_linux_arch_tui_tools_install_installs_only_tui_tools
+test_linux_arch_tui_tools_update_updates_tui_tools
 test_main_install_rejects_sudo_user_execution
 test_main_install_rejects_root_execution
 test_macos_install_uses_runner_without_bash_env_side_effects
