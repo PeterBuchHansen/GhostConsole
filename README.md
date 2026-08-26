@@ -26,7 +26,7 @@ Clone the repo and run:
 \`\`\`
 
 The first milestone flow is:
-- detect whether you are on macOS or **Ubuntu** Linux
+- detect whether you are on macOS, **Ubuntu** Linux, or **Arch/Omarchy** Linux
 - install `Ghostty` first, then `zsh` and `git`
 - create managed config and backup directories in your home folder
 - link the repo-owned config in `.config/ghostty`, `.config/zsh`, `.config/shell`, and `.config/git`
@@ -66,7 +66,8 @@ sed -n '1,2p' ~/.gitconfig
 ### ⚙️ Bootstrap
 Basic setup scripts for:
 - macOS (Homebrew)
-- **Ubuntu** (apt — other Linux distributions are not supported yet)
+- **Ubuntu** (apt)
+- **Arch / Omarchy** (pacman — other Linux distributions are not supported yet)
 
 Installs these tools in the first milestone:
 - `Ghostty`
@@ -138,7 +139,7 @@ GhostConsole will expand gradually:
 ## 📌 Notes
 
 - Optimized for personal use
-- Works best on macOS and **Ubuntu** Linux
+- Works best on macOS, **Ubuntu** Linux, and **Arch/Omarchy** Linux
 - Designed to evolve over time
 
 ---
