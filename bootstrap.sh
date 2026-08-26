@@ -83,8 +83,11 @@ install_packages() {
         ubuntu)
           linux_ubuntu_install
           ;;
+        arch|omarchy)
+          linux_arch_install
+          ;;
         *)
-          log_error "Linux bootstrap supports only Ubuntu for now (detected id: '${distro_id:-unknown}'); use Ubuntu or install/link configs yourself."
+          log_error "Linux bootstrap supports only Ubuntu and Arch/Omarchy for now (detected id: '${distro_id:-unknown}'); use one of those or install/link configs yourself."
           exit 1
           ;;
       esac
@@ -152,6 +155,15 @@ rm -f "${deb_file}"'; then
   install_navix
 }
 
+linux_arch_install() {
+  log_info "Installing packages on Arch (Ghostty first)..."
+  run_install_command 'sudo pacman -S --needed --noconfirm ghostty zsh git ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
+  install_openapi_tui
+  install_mdterm
+  install_navix
+}
+
 macos_tui_tools_install() {
   if ! command -v brew >/dev/null 2>&1; then
     log_error "Homebrew not in PATH on macOS — install from https://brew.sh then rerun bootstrap."
@@ -172,6 +184,15 @@ linux_ubuntu_tui_tools_install() {
   ensure_bat_command
   install_ubuntu_github_release_tool lazygit jesseduffield/lazygit
   install_ubuntu_github_release_tool lazydocker jesseduffield/lazydocker
+  install_openapi_tui
+  install_mdterm
+  install_navix
+}
+
+linux_arch_tui_tools_install() {
+  log_info "Installing TUI tools on Arch..."
+  run_install_command 'sudo pacman -S --needed --noconfirm ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
   install_openapi_tui
   install_mdterm
   install_navix
@@ -202,6 +223,15 @@ linux_ubuntu_tui_tools_update() {
   install_navix force
 }
 
+linux_arch_tui_tools_update() {
+  log_info "Updating TUI tools on Arch..."
+  run_install_command 'sudo pacman -Syu --needed --noconfirm ncdu btop bat neovim lnav lazygit lazydocker'
+  ensure_bat_command
+  install_openapi_tui force
+  install_mdterm force
+  install_navix force
+}
+
 install_tui_tools() {
   local kernel="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
@@ -216,8 +246,11 @@ install_tui_tools() {
         ubuntu)
           linux_ubuntu_tui_tools_install
           ;;
+        arch|omarchy)
+          linux_arch_tui_tools_install
+          ;;
         *)
-          log_error "TUI tool install supports only Ubuntu for Linux right now (detected id: '${distro_id:-unknown}')."
+          log_error "TUI tool install supports only Ubuntu and Arch/Omarchy for Linux right now (detected id: '${distro_id:-unknown}')."
           exit 1
           ;;
       esac
@@ -243,8 +276,11 @@ update_tui_tools() {
         ubuntu)
           linux_ubuntu_tui_tools_update
           ;;
+        arch|omarchy)
+          linux_arch_tui_tools_update
+          ;;
         *)
-          log_error "TUI tool update supports only Ubuntu for Linux right now (detected id: '${distro_id:-unknown}')."
+          log_error "TUI tool update supports only Ubuntu and Arch/Omarchy for Linux right now (detected id: '${distro_id:-unknown}')."
           exit 1
           ;;
       esac
